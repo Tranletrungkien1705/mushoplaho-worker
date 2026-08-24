@@ -4,6 +4,10 @@
 //              ACCESSTRADE_TOKEN, AT_CAMPAIGN_SHOPEE, AT_CAMPAIGN_TIKTOK, AT_CAMPAIGN_LAZADA
 // Cần cột Supabase submissions: order_code text, contact text (ngoài các cột sẵn có).
 
+import { ICON192, ICON512 } from './icons.js';
+import { sendWebPush } from './webpush.js';
+
+const VAPID_PUBLIC = 'BGNY3uTCFDGgY6g5UyFMrLmwnRXmWWXAroYoqYrIypZbJ-87xho81HsRNHE9NsQvwY96ADXiAtRPSVIAGyJJfFQ';
 const FB_GROUP = 'https://www.facebook.com/groups/1693634255519569';
 const PAYOUT = 'Lịch hoàn: ngày 20–25 hàng tháng, sau khi Shopee đối soát (~75–105 ngày).';
 
@@ -245,6 +249,8 @@ const SHOP_HTML = `<!doctype html>
 <meta property="og:title" content="Mushoplaho — Mua Là Hoàn">
 <meta property="og:description" content="Dán link Shopee, nhận lại đến 50% hoa hồng. Miễn phí, không cần cài app.">
 <meta property="og:type" content="website">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icon-192.png">
 <style>
   :root{--o1:#FF9F45;--o2:#FF5C7A;--g1:#12b76a;--g2:#039855;--bg:#fff6f1;--ink:#2b2b2b;--mut:#8a8a8a}
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -363,6 +369,13 @@ const SHOP_HTML = `<!doctype html>
   </div>
 
   <div class="card">
+    <div style="display:flex;gap:8px">
+      <button class="btn ghost" id="installbtn" style="display:none;flex:1;margin-top:0">📲 Cài app về máy</button>
+      <button class="btn ghost" id="notifybtn" style="flex:1;margin-top:0">🔔 Báo khi tiền về</button>
+    </div>
+  </div>
+
+  <div class="card">
     <h2>🧮 Ước tính tiền hoàn</h2>
     <input id="calcv" type="number" inputmode="numeric" placeholder="Nhập giá trị đơn (đ) — vd 500000">
     <div class="calc-out" id="calcout">Nhập giá đơn để xem số tiền có thể hoàn 💸</div>
@@ -475,6 +488,25 @@ if(sh)sh.addEventListener('click',function(){var u=location.origin;
 fetch(API+'shop-stats').then(function(r){return r.json()}).then(function(d){var n=(d&&d.count!=null)?d.count:0;if(n<50)n=50+n;
   $('proof').textContent='🔥 Đã tạo '+n.toLocaleString('vi-VN')+' link hoàn tiền cho khách';})
  .catch(function(){$('proof').textContent='🔥 Cộng đồng hoàn tiền đang lớn mỗi ngày'});
+if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(function(){})}
+(function(){var p=new URLSearchParams(location.search);var sr=p.get('url')||p.get('text')||p.get('shared')||'';var m=sr.match(/https?:\\/\\/[^\\s]+/);if(m){url.value=m[0];setTimeout(function(){go.click()},500)}})();
+var deferredPrompt=null;
+window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();deferredPrompt=e;var b=$('installbtn');if(b)b.style.display='block'});
+var ib=$('installbtn');if(ib)ib.addEventListener('click',function(){if(deferredPrompt){deferredPrompt.prompt();deferredPrompt=null;ib.style.display='none'}else tst('Mở menu trình duyệt → Thêm vào Màn hình chính')});
+function u8(b){b=b.replace(/-/g,'+').replace(/_/g,'/');while(b.length%4)b+='=';var r=atob(b),a=new Uint8Array(r.length);for(var i=0;i<r.length;i++)a[i]=r.charCodeAt(i);return a}
+var VAPID='BGNY3uTCFDGgY6g5UyFMrLmwnRXmWWXAroYoqYrIypZbJ-87xho81HsRNHE9NsQvwY96ADXiAtRPSVIAGyJJfFQ';
+var nb=$('notifybtn');if(nb)nb.addEventListener('click',function(){
+  if(!('serviceWorker' in navigator)||!('PushManager' in window)){tst('Thiết bị không hỗ trợ thông báo');return}
+  nb.textContent='...';
+  Notification.requestPermission().then(function(perm){
+    if(perm!=='granted'){nb.textContent='🔔 Báo khi tiền về';tst('Bạn chưa cho phép thông báo');return}
+    navigator.serviceWorker.ready.then(function(reg){return reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:u8(VAPID)})})
+     .then(function(sub){var c='';try{c=localStorage.getItem('mlh_contact')||''}catch(e){}
+       return fetch('/push-subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sub:sub,uid:UID,contact:c})})})
+     .then(function(){nb.textContent='✅ Đã bật thông báo';tst('Sẽ báo khi tiền hoàn về 💸')})
+     .catch(function(){nb.textContent='🔔 Báo khi tiền về';tst('Không bật được, thử lại')});
+  });
+});
 loadWallet();loadDeals();
 <\/script>
 </body>
@@ -605,6 +637,57 @@ $('reload').onclick=function(){load(false)};$('filter').addEventListener('input'
 function html(body) { return new Response(body, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } }); }
 function json(obj, status) { return new Response(JSON.stringify(obj), { status: status || 200, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } }); }
 
+const SW_JS = `self.addEventListener('install',function(e){self.skipWaiting()});
+self.addEventListener('activate',function(e){e.waitUntil(self.clients.claim())});
+self.addEventListener('push',function(e){var d={};try{d=e.data.json()}catch(x){d={title:'Mushoplaho',body:(e.data&&e.data.text())||''}}
+e.waitUntil(self.registration.showNotification(d.title||'Mushoplaho',{body:d.body||'',icon:'/icon-192.png',badge:'/icon-192.png',data:{url:d.url||'/'}}));});
+self.addEventListener('notificationclick',function(e){e.notification.close();e.waitUntil(clients.openWindow((e.notification.data&&e.notification.data.url)||'/'))});`;
+
+const MANIFEST = JSON.stringify({
+  name: 'Mushoplaho — Mua Là Hoàn', short_name: 'Mushoplaho',
+  start_url: '/', scope: '/', display: 'standalone',
+  background_color: '#fff6f1', theme_color: '#FF6B4A', lang: 'vi',
+  icons: [
+    { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
+    { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' }
+  ],
+  share_target: { action: '/', method: 'GET', params: { url: 'url', text: 'text', title: 'title' } }
+});
+
+function iconResponse(b64) {
+  const bin = atob(b64); const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new Response(arr, { headers: { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' } });
+}
+
+async function pushSubUpsert(row, env) {
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY) return;
+  try {
+    await fetch(env.SUPABASE_URL + '/rest/v1/push_subs?on_conflict=endpoint', {
+      method: 'POST',
+      headers: { apikey: env.SUPABASE_SERVICE_KEY, 'Authorization': 'Bearer ' + env.SUPABASE_SERVICE_KEY, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify(row)
+    });
+  } catch (e) { /* ignore */ }
+}
+
+// Khi admin danh dau 'paid' -> day push den cac thiet bi cua khach do
+async function notifyPaid(orderCode, env) {
+  try {
+    const rows = await supabaseFind(orderCode, env);
+    const order = rows && rows[0]; if (!order) return;
+    const contact = order.contact || '';
+    const uid = contact.indexOf('dev:') === 0 ? contact.slice(4) : '';
+    const filter = uid ? ('uid=eq.' + encodeURIComponent(uid)) : ('contact=eq.' + encodeURIComponent(contact));
+    const r = await fetch(env.SUPABASE_URL + '/rest/v1/push_subs?' + filter, {
+      headers: { apikey: env.SUPABASE_SERVICE_KEY, 'Authorization': 'Bearer ' + env.SUPABASE_SERVICE_KEY }
+    });
+    const subs = await r.json().catch(() => []);
+    const payload = JSON.stringify({ title: '💸 Tiền hoàn đã về!', body: 'Đơn ' + orderCode + ' đã được hoàn tiền — bấm để xem.', url: '/track?q=' + orderCode });
+    for (const s of subs) { if (s.sub) { try { await sendWebPush(s.sub, payload, VAPID_PUBLIC, env.VAPID_PRIVATE, env.VAPID_SUBJECT); } catch (e) { } } }
+  } catch (e) { /* ignore */ }
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -675,7 +758,22 @@ export default {
     if (request.method === 'POST' && path === '/admin-update') {
       const body = await request.json().catch(() => ({}));
       if (!checkAdmin(body.pass, env)) return json({ error: 'unauthorized' }, 401);
-      return json({ ok: await supabaseUpdate(body.order_code, body, env) });
+      const okU = await supabaseUpdate(body.order_code, body, env);
+      if (okU && body.status === 'paid') ctx.waitUntil(notifyPaid(body.order_code, env));
+      return json({ ok: okU });
+    }
+
+    // PWA: manifest, service worker, icons, push subscribe
+    if (request.method === 'GET' && path === '/manifest.json') return new Response(MANIFEST, { headers: { 'Content-Type': 'application/manifest+json', 'Cache-Control': 'public, max-age=3600' } });
+    if (request.method === 'GET' && path === '/sw.js') return new Response(SW_JS, { headers: { 'Content-Type': 'application/javascript', 'Cache-Control': 'no-cache', 'Service-Worker-Allowed': '/' } });
+    if (request.method === 'GET' && path === '/icon-192.png') return iconResponse(ICON192);
+    if (request.method === 'GET' && path === '/icon-512.png') return iconResponse(ICON512);
+    if (request.method === 'POST' && path === '/push-subscribe') {
+      const body = await request.json().catch(() => ({}));
+      const sub = body.sub;
+      if (!sub || !sub.endpoint) return json({ error: 'no sub' }, 400);
+      await pushSubUpsert({ uid: (body.uid || '').slice(0, 40), contact: (body.contact || '').slice(0, 80), endpoint: sub.endpoint, sub }, env);
+      return json({ ok: true });
     }
 
     // Deal hot (auto tu AccessTrade)
