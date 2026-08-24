@@ -102,6 +102,37 @@ async function supabaseFind(q, env) {
   }
 }
 __name(supabaseFind, "supabaseFind");
+async function supabaseList(env, limit) {
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY) return [];
+  try {
+    const r = await fetch(env.SUPABASE_URL + `/rest/v1/submissions?select=order_code,contact,platform,status,original_url,created_at&order=id.desc&limit=${limit || 50}`, {
+      headers: { apikey: env.SUPABASE_SERVICE_KEY, "Authorization": "Bearer " + env.SUPABASE_SERVICE_KEY }
+    });
+    if (!r.ok) return [];
+    return await r.json().catch(() => []);
+  } catch (e) {
+    return [];
+  }
+}
+__name(supabaseList, "supabaseList");
+async function supabaseUpdate(orderCode, status, env) {
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY || !orderCode) return false;
+  try {
+    const r = await fetch(env.SUPABASE_URL + `/rest/v1/submissions?order_code=eq.${encodeURIComponent(orderCode)}`, {
+      method: "PATCH",
+      headers: { apikey: env.SUPABASE_SERVICE_KEY, "Authorization": "Bearer " + env.SUPABASE_SERVICE_KEY, "Content-Type": "application/json", "Prefer": "return=minimal" },
+      body: JSON.stringify({ status })
+    });
+    return r.ok;
+  } catch (e) {
+    return false;
+  }
+}
+__name(supabaseUpdate, "supabaseUpdate");
+function checkAdmin(pass, env) {
+  return !!(pass && env.ADMIN_TOKEN && pass === env.ADMIN_TOKEN);
+}
+__name(checkAdmin, "checkAdmin");
 function statusLabel(s) {
   const m = {
     notified: "\u{1F7E1} \u0110\xE3 t\u1EA1o link \u2014 ch\u1EDD b\u1EA1n mua",
@@ -365,6 +396,79 @@ $('go').addEventListener('click',look);$('q').addEventListener('keydown',functio
 var qs=new URLSearchParams(location.search).get('q');if(qs){$('q').value=qs;look()}
 <\/script>
 </body></html>`;
+var ADMIN_HTML = `<!doctype html>
+<html lang="vi"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex"><title>Admin - Mushoplaho</title>
+<style>
+  :root{--o1:#FF9F45;--o2:#FF5C7A;--bg:#f4f6fb;--ink:#222;--mut:#888}
+  *{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink)}
+  header{background:linear-gradient(135deg,var(--o1),var(--o2));color:#fff;padding:18px 16px;font-weight:800;font-size:18px}
+  .wrap{max-width:960px;margin:0 auto;padding:16px}
+  .card{background:#fff;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,.06);padding:16px;margin-top:14px}
+  input,select,button{font-size:15px;padding:9px 11px;border:1px solid #d7dce5;border-radius:8px;outline:none}
+  input:focus,select:focus{border-color:var(--o1)}
+  button{background:var(--o2);color:#fff;border:none;font-weight:700;cursor:pointer}
+  button.sm{padding:6px 10px;font-size:13px}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;padding:9px 8px;border-bottom:1px solid #eef1f6;vertical-align:middle}
+  th{color:var(--mut);font-size:12px;text-transform:uppercase;letter-spacing:.4px}
+  .mut{color:var(--mut);font-size:13px}
+  .bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  a{color:var(--o2)}
+  .ov{overflow-x:auto}
+  .st-paid{color:#039855;font-weight:700}
+</style></head><body>
+<header>\u{1F510} Mushoplaho Admin</header>
+<div class="wrap">
+  <div class="card" id="login">
+    <div class="bar"><input id="pass" type="password" placeholder="M\u1EADt kh\u1EA9u admin" style="flex:1;min-width:200px">
+    <button id="btnLogin">\u0110\u0103ng nh\u1EADp</button></div>
+    <p class="mut" id="lerr" style="margin-top:8px;color:#d92d20"></p>
+  </div>
+  <div class="card" id="panel" style="display:none">
+    <div class="bar" style="justify-content:space-between">
+      <div><b id="cnt">0</b> \u0111\u01A1n \xB7 <span class="mut">m\u1EDBi nh\u1EA5t tr\u01B0\u1EDBc</span></div>
+      <div class="bar"><input id="filter" placeholder="L\u1ECDc m\xE3/S\u0110T/s\xE0n" style="width:200px"><button class="sm" id="reload">T\u1EA3i l\u1EA1i</button></div>
+    </div>
+    <div class="ov"><table id="tbl"><thead><tr>
+      <th>M\xE3 \u0111\u01A1n</th><th>Li\xEAn h\u1EC7</th><th>S\xE0n</th><th>Ng\xE0y</th><th>Tr\u1EA1ng th\xE1i</th><th></th><th>Link</th>
+    </tr></thead><tbody></tbody></table></div>
+  </div>
+</div>
+<script>
+var $=function(i){return document.getElementById(i)};var PASS='';
+var STATUSES=[['notified','Ch\u1EDD mua'],['purchased','\u0110\xE3 mua'],['confirmed','\u0110\u1ED1i so\xE1t'],['paid','\u0110\xE3 ho\xE0n'],['cancelled','Hu\u1EF7']];
+function opts(cur){return STATUSES.map(function(s){return '<option value="'+s[0]+'"'+((s[0]===cur||(cur==='web'&&s[0]==='notified'))?' selected':'')+'>'+s[1]+'</option>'}).join('')}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function login(){PASS=$('pass').value;$('lerr').textContent='';load(true)}
+function load(first){
+  fetch('/admin-list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS})})
+   .then(function(r){if(r.status===401){throw new Error('Sai m\u1EADt kh\u1EA9u')}return r.json()})
+   .then(function(d){$('login').style.display='none';$('panel').style.display='block';render(d.orders||[])})
+   .catch(function(e){if(first)$('lerr').textContent=e.message||'L\u1ED7i'});
+}
+function render(rows){
+  window._rows=rows;var f=($('filter').value||'').toLowerCase();
+  var list=rows.filter(function(r){return !f||((r.order_code||'')+ (r.contact||'')+(r.platform||'')).toLowerCase().indexOf(f)>=0});
+  $('cnt').textContent=list.length;
+  $('tbl').tBodies[0].innerHTML=list.map(function(r){
+    var d=r.created_at?String(r.created_at).slice(0,10):'';
+    return '<tr><td><b>'+esc(r.order_code)+'</b></td><td>'+esc(r.contact)+'</td><td>'+esc(r.platform)+'</td><td class="mut">'+d+'</td>'
+      +'<td><select data-c="'+esc(r.order_code)+'">'+opts(r.status)+'</select></td>'
+      +'<td><button class="sm" data-save="'+esc(r.order_code)+'">L\u01B0u</button></td>'
+      +'<td><a href="'+esc(r.original_url)+'" target="_blank">xem</a></td></tr>';
+  }).join('');
+  Array.prototype.forEach.call(document.querySelectorAll('[data-save]'),function(b){b.onclick=function(){
+    var code=b.getAttribute('data-save');var sel=document.querySelector('select[data-c="'+code+'"]');
+    b.textContent='...';fetch('/admin-update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS,order_code:code,status:sel.value})})
+     .then(function(r){return r.json()}).then(function(d){b.textContent=d.ok?'\u2713':'l\u1ED7i';setTimeout(function(){b.textContent='L\u01B0u'},1200)});
+  }});
+}
+$('btnLogin').onclick=login;$('pass').addEventListener('keydown',function(e){if(e.key==='Enter')login()});
+$('reload').onclick=function(){load(false)};$('filter').addEventListener('input',function(){render(window._rows||[])});
+<\/script>
+</body></html>`;
 function html(body) {
   return new Response(body, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
 }
@@ -422,6 +526,17 @@ var index_default = {
         when: r.created_at ? String(r.created_at).slice(0, 10) : ""
       }));
       return json({ orders });
+    }
+    if (request.method === "GET" && path === "/admin") return html(ADMIN_HTML);
+    if (request.method === "POST" && path === "/admin-list") {
+      const body = await request.json().catch(() => ({}));
+      if (!checkAdmin(body.pass, env)) return json({ error: "unauthorized" }, 401);
+      return json({ orders: await supabaseList(env, 100) });
+    }
+    if (request.method === "POST" && path === "/admin-update") {
+      const body = await request.json().catch(() => ({}));
+      if (!checkAdmin(body.pass, env)) return json({ error: "unauthorized" }, 401);
+      return json({ ok: await supabaseUpdate(body.order_code, body.status, env) });
     }
     if (request.method === "GET" && path === "/shop-stats") {
       let count = 0;
