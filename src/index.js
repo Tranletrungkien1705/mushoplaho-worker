@@ -79,6 +79,31 @@ async function makeAffiliate(url, env) {
   return { platform, aff };
 }
 
+// Deal hot: tu dong keo tu AccessTrade datafeeds (Shopee) + cache 30'
+async function dealsResponse(env, ctx) {
+  const cache = caches.default;
+  const cacheKey = new Request('https://mushoplaho-cache/deals-v1');
+  const hit = await cache.match(cacheKey);
+  if (hit) return hit;
+  let items = [];
+  try {
+    const r = await fetch('https://api.accesstrade.vn/v1/datafeeds?merchant=shopee&limit=50', {
+      headers: { 'Authorization': 'Token ' + (env.ACCESSTRADE_TOKEN || '') }
+    });
+    const j = await r.json().catch(() => ({}));
+    const data = (j && j.data) || [];
+    items = data.filter(p => p && p.image && p.aff_link)
+      .map(p => ({ name: p.name, image: p.image, price: p.price, url: p.aff_link, discount_rate: Math.round(p.discount_rate || 0) }))
+      .sort((a, b) => (b.discount_rate || 0) - (a.discount_rate || 0))
+      .slice(0, 18);
+  } catch (e) { /* ignore */ }
+  const resp = new Response(JSON.stringify({ deals: items }), {
+    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=1800' }
+  });
+  ctx.waitUntil(cache.put(cacheKey, resp.clone()));
+  return resp;
+}
+
 async function supabaseInsert(row, env) {
   if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY) return;
   try {
@@ -281,27 +306,43 @@ const SHOP_HTML = `<!doctype html>
   .faq details[open] summary::after{content:'\\2212'}
   .faq p{color:#555;font-size:14px;margin-top:8px}
   .refer{background:linear-gradient(135deg,#eef4ff,#fff);border:1px dashed #a9c2ff}
+  .hero-box{background:#fff;border-radius:18px;padding:14px;margin-top:16px;box-shadow:0 10px 28px rgba(0,0,0,.20);text-align:left}
+  .hero-box .btn{margin-top:10px}
+  .hero-box input{color:#2b2b2b}
+  .deals{display:flex;gap:10px;overflow-x:auto;padding-bottom:6px;-webkit-overflow-scrolling:touch}
+  .deal{flex:0 0 148px;background:#fff;border:1px solid #ffe1d4;border-radius:14px;overflow:hidden;text-decoration:none;color:var(--ink)}
+  .deal img{width:100%;height:148px;object-fit:cover;display:block;background:#f4f4f4}
+  .deal .dbody{padding:8px}
+  .deal .dname{font-size:12px;line-height:1.3;height:31px;overflow:hidden;font-weight:600}
+  .deal .dprice{color:#FF4E73;font-weight:800;font-size:14px;margin-top:4px}
+  .deal .ddisc{display:inline-block;background:#ffeaf0;color:#FF4E73;font-size:11px;font-weight:700;border-radius:6px;padding:1px 6px;margin-top:4px}
 </style>
 </head>
 <body>
 <header>
   <div class="logo">M</div>
   <h1>Mushoplaho</h1>
-  <div class="sub">Mua Là Hoàn — mua Shopee, nhận lại tiền 💸</div>
-  <div class="badge">Hoàn đến 50% hoa hồng</div>
-  <div class="proof" id="proof">🔥 Đang tải...</div>
-</header>
-
-<div class="wrap">
-  <div class="card">
-    <h2>🛒 Dán link sản phẩm Shopee</h2>
+  <div class="sub">Dán link Shopee — nhận lại đến <b>50%</b> 💸</div>
+  <div class="hero-box">
     <div class="inrow">
       <input id="url" type="url" inputmode="url" placeholder="Dán link Shopee vào đây..." autocomplete="off">
       <button class="paste" id="paste" type="button">📋 Dán</button>
     </div>
     <button class="btn" id="go">🎁 Nhận link hoàn tiền ngay</button>
-    <input id="contact" type="text" placeholder="SĐT/Zalo (không bắt buộc — để được nhắc khi tiền về)" autocomplete="off" style="margin-top:10px">
     <div id="err"></div>
+  </div>
+  <div class="proof" id="proof">🔥 Đang tải...</div>
+</header>
+
+<div class="wrap">
+  <div class="card" id="dealcard" style="display:none">
+    <h2>🔥 Deal hot hôm nay</h2>
+    <div class="deals" id="deals"></div>
+  </div>
+
+  <div class="card">
+    <input id="contact" type="text" placeholder="SĐT/Zalo (không bắt buộc — để được nhắc khi tiền về)" autocomplete="off">
+    <div id="err2" style="display:none"></div>
     <div id="result">
       <div class="ok">
         <p style="font-weight:800;margin-bottom:6px">🎁 Link của bạn đã sẵn sàng!</p>
@@ -390,6 +431,13 @@ function loadWallet(){
      $('walletlist').innerHTML=o.slice(0,6).map(function(r){return '<div style="border-bottom:1px dashed #ffe3d6;padding:9px 0;font-size:14px"><b>'+(r.order_code||'')+'</b> — '+(r.status_label||'')+'<div class="mut">'+(r.platform||'')+' · '+(r.when||'')+'</div></div>'}).join('');
      $('wallet').style.display='block';}).catch(function(){});
 }
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function fmt(n){n=parseInt(n,10)||0;return n.toLocaleString('vi-VN')+'đ'}
+function loadDeals(){
+  fetch('/deals').then(function(r){return r.json()}).then(function(d){var a=(d&&d.deals)||[];if(!a.length)return;
+    $('deals').innerHTML=a.map(function(p){return '<a class="deal" href="'+encodeURI(p.url)+'" target="_blank" rel="noopener">'+(p.image?'<img src="'+encodeURI(p.image)+'" loading="lazy" alt="">':'')+'<div class="dbody"><div class="dname">'+esc(p.name)+'</div><div class="dprice">'+fmt(p.price)+'</div>'+(p.discount_rate>0?'<span class="ddisc">-'+p.discount_rate+'%</span>':'')+'</div></a>'}).join('');
+    $('dealcard').style.display='block';}).catch(function(){});
+}
 function tst(m){toast.textContent=m;toast.classList.add('show');setTimeout(function(){toast.classList.remove('show')},1800)}
 function fail(m){err.textContent=m;err.style.display='block'}
 $('paste').addEventListener('click',function(){
@@ -427,7 +475,7 @@ if(sh)sh.addEventListener('click',function(){var u=location.origin;
 fetch(API+'shop-stats').then(function(r){return r.json()}).then(function(d){var n=(d&&d.count!=null)?d.count:0;if(n<50)n=50+n;
   $('proof').textContent='🔥 Đã tạo '+n.toLocaleString('vi-VN')+' link hoàn tiền cho khách';})
  .catch(function(){$('proof').textContent='🔥 Cộng đồng hoàn tiền đang lớn mỗi ngày'});
-loadWallet();
+loadWallet();loadDeals();
 <\/script>
 </body>
 </html>`;
@@ -629,6 +677,9 @@ export default {
       if (!checkAdmin(body.pass, env)) return json({ error: 'unauthorized' }, 401);
       return json({ ok: await supabaseUpdate(body.order_code, body, env) });
     }
+
+    // Deal hot (auto tu AccessTrade)
+    if (request.method === 'GET' && path === '/deals') return dealsResponse(env, ctx);
 
     // Social proof counter
     if (request.method === 'GET' && path === '/shop-stats') {
