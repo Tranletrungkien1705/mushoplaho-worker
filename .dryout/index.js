@@ -302,8 +302,8 @@ var SHOP_HTML = `<!doctype html>
       <input id="url" type="url" inputmode="url" placeholder="D\xE1n link Shopee v\xE0o \u0111\xE2y..." autocomplete="off">
       <button class="paste" id="paste" type="button">\u{1F4CB} D\xE1n</button>
     </div>
-    <input id="contact" type="text" placeholder="S\u0110T ho\u1EB7c Facebook \u0111\u1EC3 nh\u1EADn ti\u1EC1n ho\xE0n *" autocomplete="off">
-    <button class="btn" id="go">Nh\u1EADn link mua &amp; ho\xE0n ti\u1EC1n</button>
+    <button class="btn" id="go">\u{1F381} Nh\u1EADn link ho\xE0n ti\u1EC1n ngay</button>
+    <input id="contact" type="text" placeholder="S\u0110T/Zalo (kh\xF4ng b\u1EAFt bu\u1ED9c \u2014 \u0111\u1EC3 \u0111\u01B0\u1EE3c nh\u1EAFc khi ti\u1EC1n v\u1EC1)" autocomplete="off" style="margin-top:10px">
     <div id="err"></div>
     <div id="result">
       <div class="ok">
@@ -316,6 +316,12 @@ var SHOP_HTML = `<!doctype html>
       </div>
     </div>
     <div class="trust"><span>\u2705 Ch\xEDnh h\xE3ng Shopee</span><span>\u{1F512} An to\xE0n</span><span>\u{1F193} Mi\u1EC5n ph\xED</span><span>\u{1F4F1} Kh\xF4ng c\u1EA7n c\xE0i app</span></div>
+  </div>
+
+  <div class="card" id="wallet" style="display:none">
+    <h2>\u{1F9FE} \u0110\u01A1n c\u1EE7a b\u1EA1n <span class="mut" id="wcount" style="font-weight:400"></span></h2>
+    <div id="walletlist"></div>
+    <p class="muted" style="text-align:left"><a class="link" href="/track">\u{1F50E} Tra c\u1EE9u / xem t\u1EA5t c\u1EA3</a></p>
   </div>
 
   <div class="card">
@@ -376,6 +382,17 @@ var SHOP_HTML = `<!doctype html>
 <script>
 var API=location.origin+'/';var $=function(id){return document.getElementById(id)};
 var go=$('go'),url=$('url'),contact=$('contact'),res=$('result'),buy=$('buy'),err=$('err'),toast=$('toast');
+var UID=(function(){try{var u=localStorage.getItem('mlh_uid');if(!u){u='d'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);localStorage.setItem('mlh_uid',u)}return u}catch(e){return 'd0'}})();
+try{var sc=localStorage.getItem('mlh_contact');if(sc)contact.value=sc}catch(e){}
+function loadWallet(){
+  var c='';try{c=localStorage.getItem('mlh_contact')||''}catch(e){}
+  var q=(c&&c.length>=4)?c:('dev:'+UID);
+  fetch('/track-lookup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:q})})
+   .then(function(r){return r.json()}).then(function(d){var o=(d&&d.orders)||[];if(!o.length)return;
+     $('wcount').textContent='('+o.length+' \u0111\u01A1n)';
+     $('walletlist').innerHTML=o.slice(0,6).map(function(r){return '<div style="border-bottom:1px dashed #ffe3d6;padding:9px 0;font-size:14px"><b>'+(r.order_code||'')+'</b> \u2014 '+(r.status_label||'')+'<div class="mut">'+(r.platform||'')+' \xB7 '+(r.when||'')+'</div></div>'}).join('');
+     $('wallet').style.display='block';}).catch(function(){});
+}
 function tst(m){toast.textContent=m;toast.classList.add('show');setTimeout(function(){toast.classList.remove('show')},1800)}
 function fail(m){err.textContent=m;err.style.display='block'}
 $('paste').addEventListener('click',function(){
@@ -386,14 +403,14 @@ go.addEventListener('click',function(){
   err.style.display='none';res.style.display='none';
   var u=(url.value||'').trim(),c=(contact.value||'').trim();
   if(!/^https?:\\/\\//.test(u)){fail('B\u1EA1n h\xE3y d\xE1n 1 link s\u1EA3n ph\u1EA9m Shopee h\u1EE3p l\u1EC7 nh\xE9.');return}
-  if(c.length<6){fail('Nh\u1EADp S\u0110T ho\u1EB7c Facebook \u0111\u1EC3 shop tr\u1EA3 ti\u1EC1n ho\xE0n cho b\u1EA1n nh\xE9.');contact.focus();return}
   var old=go.textContent;go.innerHTML='<span class="spin"></span> \u0110ang t\u1EA1o link...';go.disabled=true;
-  fetch(API+'shop-convert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:u,contact:c})})
+  fetch(API+'shop-convert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:u,contact:c,uid:UID})})
    .then(function(r){return r.json()})
    .then(function(d){go.textContent=old;go.disabled=false;
      if(d&&d.buy_url){buy.href=d.buy_url;buy.dataset.link=d.buy_url;$('ocode').textContent=d.order_code||'';
        if(d.order_code)$('tolink').href='/track?q='+encodeURIComponent(d.order_code);
-       res.style.display='block';res.scrollIntoView({behavior:'smooth',block:'center'})}
+       if(c)try{localStorage.setItem('mlh_contact',c)}catch(e){}
+       res.style.display='block';res.scrollIntoView({behavior:'smooth',block:'center'});setTimeout(loadWallet,1000)}
      else fail((d&&d.error)||'Ch\u01B0a t\u1EA1o \u0111\u01B0\u1EE3c link, b\u1EA1n th\u1EED l\u1EA1i nh\xE9.')})
    .catch(function(){go.textContent=old;go.disabled=false;fail('L\u1ED7i m\u1EA1ng, th\u1EED l\u1EA1i sau nh\xE9.')});
 });
@@ -413,6 +430,7 @@ if(sh)sh.addEventListener('click',function(){var u=location.origin;
 fetch(API+'shop-stats').then(function(r){return r.json()}).then(function(d){var n=(d&&d.count!=null)?d.count:0;if(n<50)n=50+n;
   $('proof').textContent='\u{1F525} \u0110\xE3 t\u1EA1o '+n.toLocaleString('vi-VN')+' link ho\xE0n ti\u1EC1n cho kh\xE1ch';})
  .catch(function(){$('proof').textContent='\u{1F525} C\u1ED9ng \u0111\u1ED3ng ho\xE0n ti\u1EC1n \u0111ang l\u1EDBn m\u1ED7i ng\xE0y'});
+loadWallet();
 <\/script>
 </body>
 </html>`;
@@ -575,9 +593,10 @@ var index_default = {
     if (request.method === "POST" && path === "/shop-convert") {
       const body = await request.json().catch(() => ({}));
       const u = (body.url || "").trim();
-      const contact = (body.contact || "").trim();
+      const contactRaw = (body.contact || "").trim();
+      const uid = (body.uid || "").trim().slice(0, 40);
       if (!/^https?:\/\//.test(u)) return json({ error: "Link kh\xF4ng h\u1EE3p l\u1EC7" }, 400);
-      if (contact.length < 6) return json({ error: "Vui l\xF2ng nh\u1EADp S\u0110T/Facebook \u0111\u1EC3 nh\u1EADn ti\u1EC1n ho\xE0n" }, 400);
+      const contact = contactRaw.length >= 4 ? contactRaw : uid ? "dev:" + uid : "web";
       const { platform, aff } = await makeAffiliate(u, env);
       const code = genOrderCode();
       await supabaseInsert({ buyer_psid: "web", buyer_text: "web", contact, order_code: code, original_url: u, platform, affiliate_url: aff, status: "web" }, env);

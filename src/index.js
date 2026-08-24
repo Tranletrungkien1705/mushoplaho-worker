@@ -299,8 +299,8 @@ const SHOP_HTML = `<!doctype html>
       <input id="url" type="url" inputmode="url" placeholder="Dán link Shopee vào đây..." autocomplete="off">
       <button class="paste" id="paste" type="button">📋 Dán</button>
     </div>
-    <input id="contact" type="text" placeholder="SĐT hoặc Facebook để nhận tiền hoàn *" autocomplete="off">
-    <button class="btn" id="go">Nhận link mua &amp; hoàn tiền</button>
+    <button class="btn" id="go">🎁 Nhận link hoàn tiền ngay</button>
+    <input id="contact" type="text" placeholder="SĐT/Zalo (không bắt buộc — để được nhắc khi tiền về)" autocomplete="off" style="margin-top:10px">
     <div id="err"></div>
     <div id="result">
       <div class="ok">
@@ -313,6 +313,12 @@ const SHOP_HTML = `<!doctype html>
       </div>
     </div>
     <div class="trust"><span>✅ Chính hãng Shopee</span><span>🔒 An toàn</span><span>🆓 Miễn phí</span><span>📱 Không cần cài app</span></div>
+  </div>
+
+  <div class="card" id="wallet" style="display:none">
+    <h2>🧾 Đơn của bạn <span class="mut" id="wcount" style="font-weight:400"></span></h2>
+    <div id="walletlist"></div>
+    <p class="muted" style="text-align:left"><a class="link" href="/track">🔎 Tra cứu / xem tất cả</a></p>
   </div>
 
   <div class="card">
@@ -373,6 +379,17 @@ const SHOP_HTML = `<!doctype html>
 <script>
 var API=location.origin+'/';var $=function(id){return document.getElementById(id)};
 var go=$('go'),url=$('url'),contact=$('contact'),res=$('result'),buy=$('buy'),err=$('err'),toast=$('toast');
+var UID=(function(){try{var u=localStorage.getItem('mlh_uid');if(!u){u='d'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);localStorage.setItem('mlh_uid',u)}return u}catch(e){return 'd0'}})();
+try{var sc=localStorage.getItem('mlh_contact');if(sc)contact.value=sc}catch(e){}
+function loadWallet(){
+  var c='';try{c=localStorage.getItem('mlh_contact')||''}catch(e){}
+  var q=(c&&c.length>=4)?c:('dev:'+UID);
+  fetch('/track-lookup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:q})})
+   .then(function(r){return r.json()}).then(function(d){var o=(d&&d.orders)||[];if(!o.length)return;
+     $('wcount').textContent='('+o.length+' đơn)';
+     $('walletlist').innerHTML=o.slice(0,6).map(function(r){return '<div style="border-bottom:1px dashed #ffe3d6;padding:9px 0;font-size:14px"><b>'+(r.order_code||'')+'</b> — '+(r.status_label||'')+'<div class="mut">'+(r.platform||'')+' · '+(r.when||'')+'</div></div>'}).join('');
+     $('wallet').style.display='block';}).catch(function(){});
+}
 function tst(m){toast.textContent=m;toast.classList.add('show');setTimeout(function(){toast.classList.remove('show')},1800)}
 function fail(m){err.textContent=m;err.style.display='block'}
 $('paste').addEventListener('click',function(){
@@ -383,14 +400,14 @@ go.addEventListener('click',function(){
   err.style.display='none';res.style.display='none';
   var u=(url.value||'').trim(),c=(contact.value||'').trim();
   if(!/^https?:\\/\\//.test(u)){fail('Bạn hãy dán 1 link sản phẩm Shopee hợp lệ nhé.');return}
-  if(c.length<6){fail('Nhập SĐT hoặc Facebook để shop trả tiền hoàn cho bạn nhé.');contact.focus();return}
   var old=go.textContent;go.innerHTML='<span class="spin"></span> Đang tạo link...';go.disabled=true;
-  fetch(API+'shop-convert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:u,contact:c})})
+  fetch(API+'shop-convert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:u,contact:c,uid:UID})})
    .then(function(r){return r.json()})
    .then(function(d){go.textContent=old;go.disabled=false;
      if(d&&d.buy_url){buy.href=d.buy_url;buy.dataset.link=d.buy_url;$('ocode').textContent=d.order_code||'';
        if(d.order_code)$('tolink').href='/track?q='+encodeURIComponent(d.order_code);
-       res.style.display='block';res.scrollIntoView({behavior:'smooth',block:'center'})}
+       if(c)try{localStorage.setItem('mlh_contact',c)}catch(e){}
+       res.style.display='block';res.scrollIntoView({behavior:'smooth',block:'center'});setTimeout(loadWallet,1000)}
      else fail((d&&d.error)||'Chưa tạo được link, bạn thử lại nhé.')})
    .catch(function(){go.textContent=old;go.disabled=false;fail('Lỗi mạng, thử lại sau nhé.')});
 });
@@ -410,6 +427,7 @@ if(sh)sh.addEventListener('click',function(){var u=location.origin;
 fetch(API+'shop-stats').then(function(r){return r.json()}).then(function(d){var n=(d&&d.count!=null)?d.count:0;if(n<50)n=50+n;
   $('proof').textContent='🔥 Đã tạo '+n.toLocaleString('vi-VN')+' link hoàn tiền cho khách';})
  .catch(function(){$('proof').textContent='🔥 Cộng đồng hoàn tiền đang lớn mỗi ngày'});
+loadWallet();
 <\/script>
 </body>
 </html>`;
@@ -577,9 +595,11 @@ export default {
     if (request.method === 'POST' && path === '/shop-convert') {
       const body = await request.json().catch(() => ({}));
       const u = (body.url || '').trim();
-      const contact = (body.contact || '').trim();
+      const contactRaw = (body.contact || '').trim();
+      const uid = (body.uid || '').trim().slice(0, 40);
       if (!/^https?:\/\//.test(u)) return json({ error: 'Link không hợp lệ' }, 400);
-      if (contact.length < 6) return json({ error: 'Vui lòng nhập SĐT/Facebook để nhận tiền hoàn' }, 400);
+      // Lien he tuy chon: neu khong nhap thi gan theo device-id (van tra cuu duoc)
+      const contact = contactRaw.length >= 4 ? contactRaw : (uid ? 'dev:' + uid : 'web');
       const { platform, aff } = await makeAffiliate(u, env);
       const code = genOrderCode();
       await supabaseInsert({ buyer_psid: 'web', buyer_text: 'web', contact, order_code: code, original_url: u, platform, affiliate_url: aff, status: 'web' }, env);
