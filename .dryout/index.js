@@ -126,10 +126,9 @@ B\u1EA1n c\u1EE9 \u0111\u1EC3 l\u1EA1i c\xE2u h\u1ECFi \u1EDF \u0111\xE2y nh\xE9
 \u2022 Ho\u1EB7c g\u1EEDi th\u1EB3ng LINK s\u1EA3n ph\u1EA9m \u0111\u1EC3 nh\u1EADn link ho\xE0n ti\u1EC1n!`
 };
 function detectPlatform(url) {
-  if (/shopee/i.test(url)) return "shopee";
   if (/tiktok|douyin|vt\.tiktok/i.test(url)) return "tiktok";
   if (/lazada/i.test(url)) return "lazada";
-  return "unknown";
+  return "shopee";
 }
 __name(detectPlatform, "detectPlatform");
 function genOrderCode() {
@@ -251,6 +250,50 @@ function checkAdmin(pass, env) {
   return !!(pass && env.ADMIN_TOKEN && pass === env.ADMIN_TOKEN);
 }
 __name(checkAdmin, "checkAdmin");
+async function chatInsert(row, env) {
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY) return;
+  try {
+    await fetch(env.SUPABASE_URL + "/rest/v1/messages", {
+      method: "POST",
+      headers: { apikey: env.SUPABASE_SERVICE_KEY, "Authorization": "Bearer " + env.SUPABASE_SERVICE_KEY, "Content-Type": "application/json", "Prefer": "return=minimal" },
+      body: JSON.stringify(row)
+    });
+  } catch (e) {
+  }
+}
+__name(chatInsert, "chatInsert");
+async function chatHistory(thread, afterId, env) {
+  if (!thread || !env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY) return [];
+  let q = "thread=eq." + encodeURIComponent(thread) + "&order=id.asc&limit=200";
+  if (afterId) q += "&id=gt." + encodeURIComponent(afterId);
+  try {
+    const r = await fetch(env.SUPABASE_URL + "/rest/v1/messages?" + q, { headers: { apikey: env.SUPABASE_SERVICE_KEY, "Authorization": "Bearer " + env.SUPABASE_SERVICE_KEY } });
+    if (!r.ok) return [];
+    return await r.json().catch(() => []);
+  } catch (e) {
+    return [];
+  }
+}
+__name(chatHistory, "chatHistory");
+async function notifyThreadPush(thread, title, bodyText, env) {
+  try {
+    const uid = thread.indexOf("dev:") === 0 ? thread.slice(4) : "";
+    const filter = uid ? "uid=eq." + encodeURIComponent(uid) : "contact=eq." + encodeURIComponent(thread);
+    const r = await fetch(env.SUPABASE_URL + "/rest/v1/push_subs?" + filter, { headers: { apikey: env.SUPABASE_SERVICE_KEY, "Authorization": "Bearer " + env.SUPABASE_SERVICE_KEY } });
+    const subs = await r.json().catch(() => []);
+    const payload = JSON.stringify({ title, body: (bodyText || "").slice(0, 90), url: "/" });
+    for (const s of subs) {
+      if (s.sub) {
+        try {
+          await sendWebPush(s.sub, payload, VAPID_PUBLIC, env.VAPID_PRIVATE, env.VAPID_SUBJECT);
+        } catch (e) {
+        }
+      }
+    }
+  } catch (e) {
+  }
+}
+__name(notifyThreadPush, "notifyThreadPush");
 function statusLabel(s) {
   const m = {
     notified: "\u{1F7E1} \u0110\xE3 t\u1EA1o link \u2014 ch\u1EDD b\u1EA1n mua",
@@ -417,6 +460,10 @@ var SHOP_HTML = `<!doctype html>
   .sheet-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;font-size:17px}
   .sheet-h span{cursor:pointer;font-size:20px;color:var(--mut);padding:4px 8px}
   .sheet h3{font-size:15px;margin:16px 0 6px}
+  .msg{max-width:82%;padding:8px 12px;border-radius:14px;margin:6px 0;font-size:14px;line-height:1.4;word-break:break-word}
+  .msg.user{background:linear-gradient(135deg,var(--o1),var(--o2));color:#fff;margin-left:auto;border-bottom-right-radius:4px}
+  .msg.shop{background:#f1f3f7;color:#222;margin-right:auto;border-bottom-left-radius:4px}
+  .msg .t{display:block;font-size:10px;opacity:.7;margin-top:2px}
 </style>
 </head>
 <body>
@@ -477,7 +524,17 @@ var SHOP_HTML = `<!doctype html>
 </div>
 <div class="toast" id="toast"></div>
 
-<div class="fab" id="fab" title="Tr\u1EE3 gi\xFAp">?</div>
+<div class="fab" id="fab" title="Chat v\u1EDBi shop">\u{1F4AC}</div>
+<div class="sheet-bg" id="chatbg"></div>
+<div class="sheet" id="chat">
+  <div class="sheet-h"><b>\u{1F4AC} Chat v\u1EDBi shop</b><span><a class="link" id="helplink" style="font-size:13px;margin-right:14px">H\u01B0\u1EDBng d\u1EABn</a><span id="chatx" style="cursor:pointer">\u2715</span></span></div>
+  <div id="chatlist" style="min-height:160px;max-height:50vh;overflow-y:auto;padding:6px 0"></div>
+  <div class="inrow" style="margin-top:8px">
+    <input id="chatinput" placeholder="Nh\u1EADp STK / nick Zalo / c\xE2u h\u1ECFi..." style="margin-top:0">
+    <button class="paste" id="chatsend" style="color:#fff;background:linear-gradient(135deg,var(--o1),var(--o2));border-color:transparent">G\u1EEDi</button>
+  </div>
+  <p class="muted" style="text-align:left;margin-top:6px">B\u1EADt "\u{1F514} B\xE1o khi ti\u1EC1n v\u1EC1" \u0111\u1EC3 nh\u1EADn th\xF4ng b\xE1o khi shop tr\u1EA3 l\u1EDDi.</p>
+</div>
 <div class="sheet-bg" id="sheetbg"></div>
 <div class="sheet" id="sheet">
   <div class="sheet-h"><b>H\u01B0\u1EDBng d\u1EABn &amp; h\u1ED7 tr\u1EE3</b><span id="sheetx">\u2715</span></div>
@@ -567,10 +624,11 @@ var ib=$('installbtn');if(ib)ib.addEventListener('click',function(){if(deferredP
 function u8(b){b=b.replace(/-/g,'+').replace(/_/g,'/');while(b.length%4)b+='=';var r=atob(b),a=new Uint8Array(r.length);for(var i=0;i<r.length;i++)a[i]=r.charCodeAt(i);return a}
 var VAPID='BGNY3uTCFDGgY6g5UyFMrLmwnRXmWWXAroYoqYrIypZbJ-87xho81HsRNHE9NsQvwY96ADXiAtRPSVIAGyJJfFQ';
 var nb=$('notifybtn');if(nb)nb.addEventListener('click',function(){
-  if(!('serviceWorker' in navigator)||!('PushManager' in window)){tst('Thi\u1EBFt b\u1ECB kh\xF4ng h\u1ED7 tr\u1EE3 th\xF4ng b\xE1o');return}
+  if(!('serviceWorker' in navigator)||!('PushManager' in window)||!('Notification' in window)){tst('Tr\xECnh duy\u1EC7t kh\xF4ng h\u1ED7 tr\u1EE3 th\xF4ng b\xE1o (th\u1EED Chrome tr\xEAn Android)');return}
+  if(Notification.permission==='denied'){tst('\u0110ang b\u1ECB ch\u1EB7n: b\u1EA5m kho\xE1 \u{1F512} c\u1EA1nh \u0111\u1ECBa ch\u1EC9 \u2192 Cho ph\xE9p Th\xF4ng b\xE1o \u2192 th\u1EED l\u1EA1i');return}
   nb.textContent='...';
   Notification.requestPermission().then(function(perm){
-    if(perm!=='granted'){nb.textContent='\u{1F514} B\xE1o khi ti\u1EC1n v\u1EC1';tst('B\u1EA1n ch\u01B0a cho ph\xE9p th\xF4ng b\xE1o');return}
+    if(perm!=='granted'){nb.textContent='\u{1F514} B\xE1o khi ti\u1EC1n v\u1EC1';tst(perm==='denied'?'B\u1EA1n \u0111\xE3 t\u1EEB ch\u1ED1i. M\u1EDF kho\xE1 \u{1F512} \u2192 Th\xF4ng b\xE1o \u2192 Cho ph\xE9p':'B\u1EA1n ch\u01B0a b\u1EA5m "Cho ph\xE9p" \u1EDF h\u1ED9p tho\u1EA1i c\u1EE7a tr\xECnh duy\u1EC7t');return}
     navigator.serviceWorker.ready.then(function(reg){return reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:u8(VAPID)})})
      .then(function(sub){var c='';try{c=localStorage.getItem('mlh_contact')||''}catch(e){}
        return fetch('/push-subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sub:sub,uid:UID,contact:c})})})
@@ -580,9 +638,21 @@ var nb=$('notifybtn');if(nb)nb.addEventListener('click',function(){
 });
 var fab=$('fab'),sheet=$('sheet'),sbg=$('sheetbg');
 function openSheet(o){if(sheet){sheet.classList.toggle('open',o);sbg.classList.toggle('open',o)}}
-if(fab)fab.addEventListener('click',function(){openSheet(true)});
 if(sbg)sbg.addEventListener('click',function(){openSheet(false)});
 var sx=$('sheetx');if(sx)sx.addEventListener('click',function(){openSheet(false)});
+var chat=$('chat'),chatbg=$('chatbg'),chatLastId=0,chatTimer=null;
+function chatThread(){var c='';try{c=localStorage.getItem('mlh_contact')||''}catch(e){}return (c&&c.length>=4)?c:('dev:'+UID)}
+function renderMsgs(ms,append){var box=$('chatlist');if(!append)box.innerHTML='';ms.forEach(function(m){if(m.id>chatLastId)chatLastId=m.id;var d=document.createElement('div');d.className='msg '+(m.sender==='admin'?'shop':'user');d.innerHTML=esc(m.text).replace(/\\n/g,'<br>')+'<span class="t">'+(m.when||'')+'</span>';box.appendChild(d)});box.scrollTop=box.scrollHeight}
+function chatLoad(){fetch('/chat-history?thread='+encodeURIComponent(chatThread())+(chatLastId?('&after='+chatLastId):'')).then(function(r){return r.json()}).then(function(d){var ms=(d&&d.messages)||[];if(chatLastId===0&&!ms.length){$('chatlist').innerHTML='<div class="msg shop">Ch\xE0o b\u1EA1n \u{1F44B} G\u1EEDi <b>STK ng\xE2n h\xE0ng</b> ho\u1EB7c <b>nick Zalo</b> \u0111\u1EC3 shop li\xEAn h\u1EC7 tr\u1EA3 ti\u1EC1n ho\xE0n. C\u1EA7n h\u1ED7 tr\u1EE3 g\xEC c\u1EE9 nh\u1EAFn nh\xE9!</div>'}else if(ms.length){renderMsgs(ms,chatLastId>0)}}).catch(function(){})}
+function openChat(o){if(!chat)return;chat.classList.toggle('open',o);chatbg.classList.toggle('open',o);if(o){chatLoad();chatTimer=setInterval(chatLoad,4000)}else if(chatTimer){clearInterval(chatTimer);chatTimer=null}}
+if(fab)fab.addEventListener('click',function(){openChat(true)});
+if(chatbg)chatbg.addEventListener('click',function(){openChat(false)});
+var cx=$('chatx');if(cx)cx.addEventListener('click',function(){openChat(false)});
+function chatSend(){var el=$('chatinput'),t=(el.value||'').trim();if(!t)return;el.value='';var c='';try{c=localStorage.getItem('mlh_contact')||''}catch(e){}
+  fetch('/chat-send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t,uid:UID,contact:c})}).then(function(){setTimeout(chatLoad,300)}).catch(function(){});}
+var csd=$('chatsend');if(csd)csd.addEventListener('click',chatSend);
+var ci=$('chatinput');if(ci)ci.addEventListener('keydown',function(e){if(e.key==='Enter')chatSend()});
+var hl=$('helplink');if(hl)hl.addEventListener('click',function(){openChat(false);openSheet(true)});
 function tryClip(){if(url.value)return;try{if(navigator.clipboard&&navigator.clipboard.readText){navigator.clipboard.readText().then(function(t){t=(t||'').trim();if(!url.value&&/^https?:\\/\\//.test(t)&&/shopee|shp\\.ee/i.test(t)){url.value=t;tst('\u0110\xE3 t\u1EF1 d\xE1n link Shopee \u{1F4CB}')}}).catch(function(){})}}catch(e){}}
 window.addEventListener('focus',tryClip);setTimeout(tryClip,400);
 loadWallet();loadDeals();
@@ -671,6 +741,16 @@ var ADMIN_HTML = `<!doctype html>
       <th>M\xE3 \u0111\u01A1n</th><th>Li\xEAn h\u1EC7</th><th>STK ng\xE2n h\xE0ng</th><th>S\xE0n</th><th>Tr\u1EA1ng th\xE1i</th><th>Ghi ch\xFA</th><th></th><th>Link</th>
     </tr></thead><tbody></tbody></table></div>
   </div>
+  <div class="card" id="chatpanel" style="display:none">
+    <b>\u{1F4AC} Tin nh\u1EAFn kh\xE1ch</b>
+    <div style="display:flex;gap:12px;margin-top:10px;flex-wrap:wrap">
+      <div id="threads" style="flex:1;min-width:170px;max-height:340px;overflow-y:auto"></div>
+      <div style="flex:2;min-width:220px">
+        <div id="cmsgs" style="max-height:280px;overflow-y:auto;border:1px solid #eef1f6;border-radius:8px;padding:8px;min-height:110px"></div>
+        <div class="bar" style="margin-top:8px"><input id="creply" placeholder="Tr\u1EA3 l\u1EDDi kh\xE1ch..." style="flex:1"><button class="sm" id="csend">G\u1EEDi</button></div>
+      </div>
+    </div>
+  </div>
 </div>
 <script>
 var $=function(i){return document.getElementById(i)};var PASS='';
@@ -681,7 +761,7 @@ function login(){PASS=$('pass').value;$('lerr').textContent='';load(true)}
 function load(first){
   fetch('/admin-list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS})})
    .then(function(r){if(r.status===401){throw new Error('Sai m\u1EADt kh\u1EA9u')}return r.json()})
-   .then(function(d){$('login').style.display='none';$('panel').style.display='block';render(d.orders||[])})
+   .then(function(d){$('login').style.display='none';$('panel').style.display='block';$('chatpanel').style.display='block';render(d.orders||[]);loadThreads()})
    .catch(function(e){if(first)$('lerr').textContent=e.message||'L\u1ED7i'});
 }
 function render(rows){
@@ -707,6 +787,14 @@ function render(rows){
 }
 $('btnLogin').onclick=login;$('pass').addEventListener('keydown',function(e){if(e.key==='Enter')login()});
 $('reload').onclick=function(){load(false)};$('filter').addEventListener('input',function(){render(window._rows||[])});
+var curThread=null;
+function loadThreads(){fetch('/admin-threads',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS})}).then(function(r){return r.json()}).then(function(d){var t=(d.threads)||[];
+  $('threads').innerHTML=t.length?t.map(function(x){return '<div class="row" style="cursor:pointer" data-th="'+esc(x.thread)+'"><b style="font-size:13px">'+esc(x.thread)+'</b><div class="mut">'+(x.sender==='admin'?'B\u1EA1n: ':'')+esc((x.last||'').slice(0,36))+'</div></div>'}).join(''):'<p class="mut">Ch\u01B0a c\xF3 tin nh\u1EAFn</p>';
+  Array.prototype.forEach.call(document.querySelectorAll('[data-th]'),function(el){el.onclick=function(){curThread=el.getAttribute('data-th');openThread()}})}).catch(function(){})}
+function openThread(){if(!curThread)return;fetch('/admin-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS,thread:curThread})}).then(function(r){return r.json()}).then(function(d){var ms=(d.messages)||[];
+  $('cmsgs').innerHTML=ms.map(function(m){return '<div style="text-align:'+(m.sender==='admin'?'right':'left')+';margin:4px 0"><span style="display:inline-block;'+(m.sender==='admin'?'background:#1f6feb;color:#fff':'background:#f1f3f7')+';padding:6px 10px;border-radius:10px;font-size:13px;max-width:85%">'+esc(m.text)+'</span></div>'}).join('');$('cmsgs').scrollTop=$('cmsgs').scrollHeight}).catch(function(){})}
+$('csend').onclick=function(){var t=($('creply').value||'').trim();if(!t||!curThread)return;$('creply').value='';fetch('/admin-chat-reply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS,thread:curThread,text:t})}).then(function(){setTimeout(openThread,300);setTimeout(loadThreads,400)})};
+$('creply').addEventListener('keydown',function(e){if(e.key==='Enter')$('csend').click()});
 <\/script>
 </body></html>`;
 function html(body) {
@@ -862,6 +950,54 @@ var index_default = {
       const sub = body.sub;
       if (!sub || !sub.endpoint) return json({ error: "no sub" }, 400);
       await pushSubUpsert({ uid: (body.uid || "").slice(0, 40), contact: (body.contact || "").slice(0, 80), endpoint: sub.endpoint, sub }, env);
+      return json({ ok: true });
+    }
+    if (request.method === "POST" && path === "/chat-send") {
+      const body = await request.json().catch(() => ({}));
+      const text = (body.text || "").trim().slice(0, 1e3);
+      const uid = (body.uid || "").slice(0, 40);
+      const contact = (body.contact || "").trim().slice(0, 80);
+      if (!text) return json({ error: "empty" }, 400);
+      const thread = contact && contact.length >= 4 ? contact : "dev:" + uid;
+      await chatInsert({ thread, sender: "user", text }, env);
+      return json({ ok: true, thread });
+    }
+    if (request.method === "GET" && path === "/chat-history") {
+      const msgs = await chatHistory(url.searchParams.get("thread"), url.searchParams.get("after"), env);
+      return json({ messages: msgs.map((m) => ({ id: m.id, sender: m.sender, text: m.text, when: m.created_at ? String(m.created_at).slice(11, 16) : "" })) });
+    }
+    if (request.method === "POST" && path === "/admin-threads") {
+      const body = await request.json().catch(() => ({}));
+      if (!checkAdmin(body.pass, env)) return json({ error: "unauthorized" }, 401);
+      let rows = [];
+      try {
+        const r = await fetch(env.SUPABASE_URL + "/rest/v1/messages?order=id.desc&limit=300", { headers: { apikey: env.SUPABASE_SERVICE_KEY, "Authorization": "Bearer " + env.SUPABASE_SERVICE_KEY } });
+        rows = await r.json().catch(() => []);
+      } catch (e) {
+      }
+      const seen = {};
+      const threads = [];
+      for (const m of rows) {
+        if (!seen[m.thread]) {
+          seen[m.thread] = 1;
+          threads.push({ thread: m.thread, last: m.text, sender: m.sender, when: m.created_at ? String(m.created_at).slice(5, 16) : "" });
+        }
+      }
+      return json({ threads });
+    }
+    if (request.method === "POST" && path === "/admin-chat") {
+      const body = await request.json().catch(() => ({}));
+      if (!checkAdmin(body.pass, env)) return json({ error: "unauthorized" }, 401);
+      const msgs = await chatHistory(body.thread, null, env);
+      return json({ messages: msgs.map((m) => ({ id: m.id, sender: m.sender, text: m.text, when: m.created_at ? String(m.created_at).slice(5, 16) : "" })) });
+    }
+    if (request.method === "POST" && path === "/admin-chat-reply") {
+      const body = await request.json().catch(() => ({}));
+      if (!checkAdmin(body.pass, env)) return json({ error: "unauthorized" }, 401);
+      const text = (body.text || "").trim().slice(0, 1e3);
+      if (!text || !body.thread) return json({ error: "empty" }, 400);
+      await chatInsert({ thread: body.thread, sender: "admin", text }, env);
+      ctx.waitUntil(notifyThreadPush(body.thread, "\u{1F4AC} Shop tr\u1EA3 l\u1EDDi b\u1EA1n", text, env));
       return json({ ok: true });
     }
     if (request.method === "GET" && path === "/deals") return dealsResponse(env, ctx);

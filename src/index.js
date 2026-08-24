@@ -49,10 +49,10 @@ Bạn cứ để lại câu hỏi ở đây nhé 🥰`,
 };
 
 function detectPlatform(url) {
-  if (/shopee/i.test(url)) return 'shopee';
   if (/tiktok|douyin|vt\.tiktok/i.test(url)) return 'tiktok';
   if (/lazada/i.test(url)) return 'lazada';
-  return 'unknown';
+  // Shopee: gom ca link rut gon shp.ee / s.shopee ; shop chi Shopee nen mac dinh = shopee (khong de "unknown" mat hoa hong)
+  return 'shopee';
 }
 
 function genOrderCode() {
@@ -165,6 +165,40 @@ async function supabaseUpdate(orderCode, patch, env) {
 }
 
 function checkAdmin(pass, env) { return !!(pass && env.ADMIN_TOKEN && pass === env.ADMIN_TOKEN); }
+
+async function chatInsert(row, env) {
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY) return;
+  try {
+    await fetch(env.SUPABASE_URL + '/rest/v1/messages', {
+      method: 'POST',
+      headers: { apikey: env.SUPABASE_SERVICE_KEY, 'Authorization': 'Bearer ' + env.SUPABASE_SERVICE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+      body: JSON.stringify(row)
+    });
+  } catch (e) { /* ignore */ }
+}
+
+async function chatHistory(thread, afterId, env) {
+  if (!thread || !env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY) return [];
+  let q = 'thread=eq.' + encodeURIComponent(thread) + '&order=id.asc&limit=200';
+  if (afterId) q += '&id=gt.' + encodeURIComponent(afterId);
+  try {
+    const r = await fetch(env.SUPABASE_URL + '/rest/v1/messages?' + q, { headers: { apikey: env.SUPABASE_SERVICE_KEY, 'Authorization': 'Bearer ' + env.SUPABASE_SERVICE_KEY } });
+    if (!r.ok) return [];
+    return await r.json().catch(() => []);
+  } catch (e) { return []; }
+}
+
+// Push khi shop tra loi chat (hoac 'paid') den cac thiet bi cua thread do
+async function notifyThreadPush(thread, title, bodyText, env) {
+  try {
+    const uid = thread.indexOf('dev:') === 0 ? thread.slice(4) : '';
+    const filter = uid ? ('uid=eq.' + encodeURIComponent(uid)) : ('contact=eq.' + encodeURIComponent(thread));
+    const r = await fetch(env.SUPABASE_URL + '/rest/v1/push_subs?' + filter, { headers: { apikey: env.SUPABASE_SERVICE_KEY, 'Authorization': 'Bearer ' + env.SUPABASE_SERVICE_KEY } });
+    const subs = await r.json().catch(() => []);
+    const payload = JSON.stringify({ title: title, body: (bodyText || '').slice(0, 90), url: '/' });
+    for (const s of subs) { if (s.sub) { try { await sendWebPush(s.sub, payload, VAPID_PUBLIC, env.VAPID_PRIVATE, env.VAPID_SUBJECT); } catch (e) { } } }
+  } catch (e) { /* ignore */ }
+}
 
 function statusLabel(s) {
   const m = { notified: '🟡 Đã tạo link — chờ bạn mua', web: '🟡 Đã tạo link — chờ bạn mua',
@@ -330,6 +364,10 @@ const SHOP_HTML = `<!doctype html>
   .sheet-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;font-size:17px}
   .sheet-h span{cursor:pointer;font-size:20px;color:var(--mut);padding:4px 8px}
   .sheet h3{font-size:15px;margin:16px 0 6px}
+  .msg{max-width:82%;padding:8px 12px;border-radius:14px;margin:6px 0;font-size:14px;line-height:1.4;word-break:break-word}
+  .msg.user{background:linear-gradient(135deg,var(--o1),var(--o2));color:#fff;margin-left:auto;border-bottom-right-radius:4px}
+  .msg.shop{background:#f1f3f7;color:#222;margin-right:auto;border-bottom-left-radius:4px}
+  .msg .t{display:block;font-size:10px;opacity:.7;margin-top:2px}
 </style>
 </head>
 <body>
@@ -390,7 +428,17 @@ const SHOP_HTML = `<!doctype html>
 </div>
 <div class="toast" id="toast"></div>
 
-<div class="fab" id="fab" title="Trợ giúp">?</div>
+<div class="fab" id="fab" title="Chat với shop">💬</div>
+<div class="sheet-bg" id="chatbg"></div>
+<div class="sheet" id="chat">
+  <div class="sheet-h"><b>💬 Chat với shop</b><span><a class="link" id="helplink" style="font-size:13px;margin-right:14px">Hướng dẫn</a><span id="chatx" style="cursor:pointer">✕</span></span></div>
+  <div id="chatlist" style="min-height:160px;max-height:50vh;overflow-y:auto;padding:6px 0"></div>
+  <div class="inrow" style="margin-top:8px">
+    <input id="chatinput" placeholder="Nhập STK / nick Zalo / câu hỏi..." style="margin-top:0">
+    <button class="paste" id="chatsend" style="color:#fff;background:linear-gradient(135deg,var(--o1),var(--o2));border-color:transparent">Gửi</button>
+  </div>
+  <p class="muted" style="text-align:left;margin-top:6px">Bật "🔔 Báo khi tiền về" để nhận thông báo khi shop trả lời.</p>
+</div>
 <div class="sheet-bg" id="sheetbg"></div>
 <div class="sheet" id="sheet">
   <div class="sheet-h"><b>Hướng dẫn &amp; hỗ trợ</b><span id="sheetx">✕</span></div>
@@ -480,10 +528,11 @@ var ib=$('installbtn');if(ib)ib.addEventListener('click',function(){if(deferredP
 function u8(b){b=b.replace(/-/g,'+').replace(/_/g,'/');while(b.length%4)b+='=';var r=atob(b),a=new Uint8Array(r.length);for(var i=0;i<r.length;i++)a[i]=r.charCodeAt(i);return a}
 var VAPID='BGNY3uTCFDGgY6g5UyFMrLmwnRXmWWXAroYoqYrIypZbJ-87xho81HsRNHE9NsQvwY96ADXiAtRPSVIAGyJJfFQ';
 var nb=$('notifybtn');if(nb)nb.addEventListener('click',function(){
-  if(!('serviceWorker' in navigator)||!('PushManager' in window)){tst('Thiết bị không hỗ trợ thông báo');return}
+  if(!('serviceWorker' in navigator)||!('PushManager' in window)||!('Notification' in window)){tst('Trình duyệt không hỗ trợ thông báo (thử Chrome trên Android)');return}
+  if(Notification.permission==='denied'){tst('Đang bị chặn: bấm khoá 🔒 cạnh địa chỉ → Cho phép Thông báo → thử lại');return}
   nb.textContent='...';
   Notification.requestPermission().then(function(perm){
-    if(perm!=='granted'){nb.textContent='🔔 Báo khi tiền về';tst('Bạn chưa cho phép thông báo');return}
+    if(perm!=='granted'){nb.textContent='🔔 Báo khi tiền về';tst(perm==='denied'?'Bạn đã từ chối. Mở khoá 🔒 → Thông báo → Cho phép':'Bạn chưa bấm "Cho phép" ở hộp thoại của trình duyệt');return}
     navigator.serviceWorker.ready.then(function(reg){return reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:u8(VAPID)})})
      .then(function(sub){var c='';try{c=localStorage.getItem('mlh_contact')||''}catch(e){}
        return fetch('/push-subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sub:sub,uid:UID,contact:c})})})
@@ -493,9 +542,21 @@ var nb=$('notifybtn');if(nb)nb.addEventListener('click',function(){
 });
 var fab=$('fab'),sheet=$('sheet'),sbg=$('sheetbg');
 function openSheet(o){if(sheet){sheet.classList.toggle('open',o);sbg.classList.toggle('open',o)}}
-if(fab)fab.addEventListener('click',function(){openSheet(true)});
 if(sbg)sbg.addEventListener('click',function(){openSheet(false)});
 var sx=$('sheetx');if(sx)sx.addEventListener('click',function(){openSheet(false)});
+var chat=$('chat'),chatbg=$('chatbg'),chatLastId=0,chatTimer=null;
+function chatThread(){var c='';try{c=localStorage.getItem('mlh_contact')||''}catch(e){}return (c&&c.length>=4)?c:('dev:'+UID)}
+function renderMsgs(ms,append){var box=$('chatlist');if(!append)box.innerHTML='';ms.forEach(function(m){if(m.id>chatLastId)chatLastId=m.id;var d=document.createElement('div');d.className='msg '+(m.sender==='admin'?'shop':'user');d.innerHTML=esc(m.text).replace(/\\n/g,'<br>')+'<span class="t">'+(m.when||'')+'</span>';box.appendChild(d)});box.scrollTop=box.scrollHeight}
+function chatLoad(){fetch('/chat-history?thread='+encodeURIComponent(chatThread())+(chatLastId?('&after='+chatLastId):'')).then(function(r){return r.json()}).then(function(d){var ms=(d&&d.messages)||[];if(chatLastId===0&&!ms.length){$('chatlist').innerHTML='<div class="msg shop">Chào bạn 👋 Gửi <b>STK ngân hàng</b> hoặc <b>nick Zalo</b> để shop liên hệ trả tiền hoàn. Cần hỗ trợ gì cứ nhắn nhé!</div>'}else if(ms.length){renderMsgs(ms,chatLastId>0)}}).catch(function(){})}
+function openChat(o){if(!chat)return;chat.classList.toggle('open',o);chatbg.classList.toggle('open',o);if(o){chatLoad();chatTimer=setInterval(chatLoad,4000)}else if(chatTimer){clearInterval(chatTimer);chatTimer=null}}
+if(fab)fab.addEventListener('click',function(){openChat(true)});
+if(chatbg)chatbg.addEventListener('click',function(){openChat(false)});
+var cx=$('chatx');if(cx)cx.addEventListener('click',function(){openChat(false)});
+function chatSend(){var el=$('chatinput'),t=(el.value||'').trim();if(!t)return;el.value='';var c='';try{c=localStorage.getItem('mlh_contact')||''}catch(e){}
+  fetch('/chat-send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t,uid:UID,contact:c})}).then(function(){setTimeout(chatLoad,300)}).catch(function(){});}
+var csd=$('chatsend');if(csd)csd.addEventListener('click',chatSend);
+var ci=$('chatinput');if(ci)ci.addEventListener('keydown',function(e){if(e.key==='Enter')chatSend()});
+var hl=$('helplink');if(hl)hl.addEventListener('click',function(){openChat(false);openSheet(true)});
 function tryClip(){if(url.value)return;try{if(navigator.clipboard&&navigator.clipboard.readText){navigator.clipboard.readText().then(function(t){t=(t||'').trim();if(!url.value&&/^https?:\\/\\//.test(t)&&/shopee|shp\\.ee/i.test(t)){url.value=t;tst('Đã tự dán link Shopee 📋')}}).catch(function(){})}}catch(e){}}
 window.addEventListener('focus',tryClip);setTimeout(tryClip,400);
 loadWallet();loadDeals();
@@ -586,6 +647,16 @@ const ADMIN_HTML = `<!doctype html>
       <th>Mã đơn</th><th>Liên hệ</th><th>STK ngân hàng</th><th>Sàn</th><th>Trạng thái</th><th>Ghi chú</th><th></th><th>Link</th>
     </tr></thead><tbody></tbody></table></div>
   </div>
+  <div class="card" id="chatpanel" style="display:none">
+    <b>💬 Tin nhắn khách</b>
+    <div style="display:flex;gap:12px;margin-top:10px;flex-wrap:wrap">
+      <div id="threads" style="flex:1;min-width:170px;max-height:340px;overflow-y:auto"></div>
+      <div style="flex:2;min-width:220px">
+        <div id="cmsgs" style="max-height:280px;overflow-y:auto;border:1px solid #eef1f6;border-radius:8px;padding:8px;min-height:110px"></div>
+        <div class="bar" style="margin-top:8px"><input id="creply" placeholder="Trả lời khách..." style="flex:1"><button class="sm" id="csend">Gửi</button></div>
+      </div>
+    </div>
+  </div>
 </div>
 <script>
 var $=function(i){return document.getElementById(i)};var PASS='';
@@ -596,7 +667,7 @@ function login(){PASS=$('pass').value;$('lerr').textContent='';load(true)}
 function load(first){
   fetch('/admin-list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS})})
    .then(function(r){if(r.status===401){throw new Error('Sai mật khẩu')}return r.json()})
-   .then(function(d){$('login').style.display='none';$('panel').style.display='block';render(d.orders||[])})
+   .then(function(d){$('login').style.display='none';$('panel').style.display='block';$('chatpanel').style.display='block';render(d.orders||[]);loadThreads()})
    .catch(function(e){if(first)$('lerr').textContent=e.message||'Lỗi'});
 }
 function render(rows){
@@ -622,6 +693,14 @@ function render(rows){
 }
 $('btnLogin').onclick=login;$('pass').addEventListener('keydown',function(e){if(e.key==='Enter')login()});
 $('reload').onclick=function(){load(false)};$('filter').addEventListener('input',function(){render(window._rows||[])});
+var curThread=null;
+function loadThreads(){fetch('/admin-threads',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS})}).then(function(r){return r.json()}).then(function(d){var t=(d.threads)||[];
+  $('threads').innerHTML=t.length?t.map(function(x){return '<div class="row" style="cursor:pointer" data-th="'+esc(x.thread)+'"><b style="font-size:13px">'+esc(x.thread)+'</b><div class="mut">'+(x.sender==='admin'?'Bạn: ':'')+esc((x.last||'').slice(0,36))+'</div></div>'}).join(''):'<p class="mut">Chưa có tin nhắn</p>';
+  Array.prototype.forEach.call(document.querySelectorAll('[data-th]'),function(el){el.onclick=function(){curThread=el.getAttribute('data-th');openThread()}})}).catch(function(){})}
+function openThread(){if(!curThread)return;fetch('/admin-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS,thread:curThread})}).then(function(r){return r.json()}).then(function(d){var ms=(d.messages)||[];
+  $('cmsgs').innerHTML=ms.map(function(m){return '<div style="text-align:'+(m.sender==='admin'?'right':'left')+';margin:4px 0"><span style="display:inline-block;'+(m.sender==='admin'?'background:#1f6feb;color:#fff':'background:#f1f3f7')+';padding:6px 10px;border-radius:10px;font-size:13px;max-width:85%">'+esc(m.text)+'</span></div>'}).join('');$('cmsgs').scrollTop=$('cmsgs').scrollHeight}).catch(function(){})}
+$('csend').onclick=function(){var t=($('creply').value||'').trim();if(!t||!curThread)return;$('creply').value='';fetch('/admin-chat-reply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS,thread:curThread,text:t})}).then(function(){setTimeout(openThread,300);setTimeout(loadThreads,400)})};
+$('creply').addEventListener('keydown',function(e){if(e.key==='Enter')$('csend').click()});
 <\/script>
 </body></html>`;
 
@@ -770,6 +849,46 @@ export default {
       const sub = body.sub;
       if (!sub || !sub.endpoint) return json({ error: 'no sub' }, 400);
       await pushSubUpsert({ uid: (body.uid || '').slice(0, 40), contact: (body.contact || '').slice(0, 80), endpoint: sub.endpoint, sub }, env);
+      return json({ ok: true });
+    }
+
+    // Chat khach <-> shop
+    if (request.method === 'POST' && path === '/chat-send') {
+      const body = await request.json().catch(() => ({}));
+      const text = (body.text || '').trim().slice(0, 1000);
+      const uid = (body.uid || '').slice(0, 40);
+      const contact = (body.contact || '').trim().slice(0, 80);
+      if (!text) return json({ error: 'empty' }, 400);
+      const thread = (contact && contact.length >= 4) ? contact : ('dev:' + uid);
+      await chatInsert({ thread, sender: 'user', text }, env);
+      return json({ ok: true, thread });
+    }
+    if (request.method === 'GET' && path === '/chat-history') {
+      const msgs = await chatHistory(url.searchParams.get('thread'), url.searchParams.get('after'), env);
+      return json({ messages: msgs.map(m => ({ id: m.id, sender: m.sender, text: m.text, when: m.created_at ? String(m.created_at).slice(11, 16) : '' })) });
+    }
+    if (request.method === 'POST' && path === '/admin-threads') {
+      const body = await request.json().catch(() => ({}));
+      if (!checkAdmin(body.pass, env)) return json({ error: 'unauthorized' }, 401);
+      let rows = [];
+      try { const r = await fetch(env.SUPABASE_URL + '/rest/v1/messages?order=id.desc&limit=300', { headers: { apikey: env.SUPABASE_SERVICE_KEY, 'Authorization': 'Bearer ' + env.SUPABASE_SERVICE_KEY } }); rows = await r.json().catch(() => []); } catch (e) { }
+      const seen = {}; const threads = [];
+      for (const m of rows) { if (!seen[m.thread]) { seen[m.thread] = 1; threads.push({ thread: m.thread, last: m.text, sender: m.sender, when: m.created_at ? String(m.created_at).slice(5, 16) : '' }); } }
+      return json({ threads });
+    }
+    if (request.method === 'POST' && path === '/admin-chat') {
+      const body = await request.json().catch(() => ({}));
+      if (!checkAdmin(body.pass, env)) return json({ error: 'unauthorized' }, 401);
+      const msgs = await chatHistory(body.thread, null, env);
+      return json({ messages: msgs.map(m => ({ id: m.id, sender: m.sender, text: m.text, when: m.created_at ? String(m.created_at).slice(5, 16) : '' })) });
+    }
+    if (request.method === 'POST' && path === '/admin-chat-reply') {
+      const body = await request.json().catch(() => ({}));
+      if (!checkAdmin(body.pass, env)) return json({ error: 'unauthorized' }, 401);
+      const text = (body.text || '').trim().slice(0, 1000);
+      if (!text || !body.thread) return json({ error: 'empty' }, 400);
+      await chatInsert({ thread: body.thread, sender: 'admin', text }, env);
+      ctx.waitUntil(notifyThreadPush(body.thread, '💬 Shop trả lời bạn', text, env));
       return json({ ok: true });
     }
 
