@@ -409,6 +409,14 @@ var SHOP_HTML = `<!doctype html>
   .deal .dname{font-size:12px;line-height:1.3;height:31px;overflow:hidden;font-weight:600}
   .deal .dprice{color:#FF4E73;font-weight:800;font-size:14px;margin-top:4px}
   .deal .ddisc{display:inline-block;background:#ffeaf0;color:#FF4E73;font-size:11px;font-weight:700;border-radius:6px;padding:1px 6px;margin-top:4px}
+  .fab{position:fixed;right:16px;bottom:20px;width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,var(--o1),var(--o2));color:#fff;font-size:26px;font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(255,90,110,.45);cursor:pointer;z-index:20}
+  .sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);opacity:0;pointer-events:none;transition:.25s;z-index:21}
+  .sheet-bg.open{opacity:1;pointer-events:auto}
+  .sheet{position:fixed;left:0;right:0;bottom:0;max-height:82vh;overflow-y:auto;background:#fff;border-radius:22px 22px 0 0;padding:18px 16px 34px;transform:translateY(101%);transition:transform .28s ease;z-index:22;max-width:600px;margin:0 auto}
+  .sheet.open{transform:translateY(0)}
+  .sheet-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;font-size:17px}
+  .sheet-h span{cursor:pointer;font-size:20px;color:var(--mut);padding:4px 8px}
+  .sheet h3{font-size:15px;margin:16px 0 6px}
 </style>
 </head>
 <body>
@@ -462,60 +470,41 @@ var SHOP_HTML = `<!doctype html>
     </div>
   </div>
 
-  <div class="card">
-    <h2>\u{1F9EE} \u01AF\u1EDBc t\xEDnh ti\u1EC1n ho\xE0n</h2>
-    <input id="calcv" type="number" inputmode="numeric" placeholder="Nh\u1EADp gi\xE1 tr\u1ECB \u0111\u01A1n (\u0111) \u2014 vd 500000">
-    <div class="calc-out" id="calcout">Nh\u1EADp gi\xE1 \u0111\u01A1n \u0111\u1EC3 xem s\u1ED1 ti\u1EC1n c\xF3 th\u1EC3 ho\xE0n \u{1F4B8}</div>
-    <p class="muted">\u01AF\u1EDBc t\xEDnh ~2\u20137% gi\xE1 tr\u1ECB \u0111\u01A1n (tu\u1EF3 ng\xE0nh h\xE0ng). S\u1ED1 th\u1EF1c nh\u1EADn theo hoa h\u1ED3ng Shopee \u0111\u1ED1i so\xE1t.</p>
-  </div>
-
-  <div class="card">
-    <h2>\u{1F4A1} C\xE1ch ho\u1EA1t \u0111\u1ED9ng</h2>
-    <ol class="steps">
-      <li>D\xE1n link Shopee + S\u0110T/Facebook, b\u1EA5m n\xFAt ph\xEDa tr\xEAn.</li>
-      <li>B\u1EA5m <b>\u201CM\u1EDF Shopee &amp; mua ngay\u201D</b> \u2192 mua nh\u01B0 b\xECnh th\u01B0\u1EDDng.</li>
-      <li>Tham gia Nh\xF3m \u2192 g\u1EEDi \u1EA3nh \u0111\u01A1n \u2192 <b>nh\u1EADn ho\xE0n 50%</b> hoa h\u1ED3ng.</li>
-    </ol>
-    <p class="muted"><a class="link" href="/track">\u{1F50E} \u0110\xE3 c\xF3 m\xE3 \u0111\u01A1n? Tra c\u1EE9u t\u1EA1i \u0111\xE2y</a></p>
-  </div>
-
-  <div class="card">
-    <h2>\u{1F4B8} L\u1ECBch nh\u1EADn ti\u1EC1n ho\xE0n</h2>
-    <ul class="tl">
-      <li><b>Ng\xE0y 18</b> h\xE0ng th\xE1ng \u2014 ch\u1ED1t b\xE1o c\xE1o &amp; xin STK (n\u1EBFu l\u1EA7n \u0111\u1EA7u)</li>
-      <li><b>Ng\xE0y 20\u201325</b> \u2014 chuy\u1EC3n ti\u1EC1n ho\xE0n v\xE0o t\xE0i kho\u1EA3n b\u1EA1n</li>
-      <li><b>Ng\xE0y 26</b> \u2014 th\xF4ng b\xE1o ho\xE0n t\u1EA5t</li>
-      <li>\u0110\u01A1n \u0111\u01B0\u1EE3c ho\xE0n sau khi Shopee \u0111\u1ED1i so\xE1t (~75\u2013105 ng\xE0y)</li>
-    </ul>
-  </div>
-
-  <div class="card refer">
-    <h2>\u{1F381} Gi\u1EDBi thi\u1EC7u b\u1EA1n b\xE8</h2>
-    <p class="muted" style="margin:0 0 10px;text-align:left">R\u1EE7 b\u1EA1n c\xF9ng mua ho\xE0n ti\u1EC1n \u2014 c\u1ED9ng \u0111\u1ED3ng deal c\xE0ng m\u1EA1nh, \u01B0u \u0111\xE3i c\xE0ng nhi\u1EC1u.</p>
-    <button class="btn ghost" id="share" type="button">\u{1F517} Chia s\u1EBB Mushoplaho</button>
-  </div>
-
-  <div class="card faq">
-    <h2>\u2753 C\xE2u h\u1ECFi th\u01B0\u1EDDng g\u1EB7p</h2>
-    <details><summary>C\xF3 m\u1EA5t ph\xED kh\xF4ng?</summary><p>Ho\xE0n to\xE0n mi\u1EC5n ph\xED. B\u1EA1n ch\u1EC9 d\xE1n link, mua nh\u01B0 b\xECnh th\u01B0\u1EDDng v\xE0 nh\u1EADn l\u1EA1i ti\u1EC1n.</p></details>
-    <details><summary>Bao l\xE2u th\xEC nh\u1EADn \u0111\u01B0\u1EE3c ti\u1EC1n?</summary><p>Sau khi Shopee \u0111\u1ED1i so\xE1t (~75\u2013105 ng\xE0y), ti\u1EC1n ho\xE0n chuy\u1EC3n v\xE0o ng\xE0y 20\u201325 h\xE0ng th\xE1ng.</p></details>
-    <details><summary>V\xEC sao ph\u1EA3i b\u1EA5m link shop g\u1EEDi tr\u01B0\u1EDBc khi mua?</summary><p>Link \u0111\xF3 ghi nh\u1EADn \u0111\u01A1n c\u1EE7a b\u1EA1n \u0111\u1EC3 t\xEDnh hoa h\u1ED3ng. Mua kh\xF4ng qua link s\u1EBD kh\xF4ng \u0111\u01B0\u1EE3c ho\xE0n.</p></details>
-    <details><summary>H\xE0ng c\xF3 ch\xEDnh h\xE3ng kh\xF4ng?</summary><p>B\u1EA1n mua th\u1EB3ng tr\xEAn Shopee \u2014 s\u1EA3n ph\u1EA9m, gi\xE1, b\u1EA3o h\xE0nh \u0111\u1EC1u theo Shopee &amp; ng\u01B0\u1EDDi b\xE1n.</p></details>
-    <details><summary>L\xE0m sao nh\u1EADn ti\u1EC1n ho\xE0n?</summary><p>Tham gia Nh\xF3m Facebook, g\u1EEDi \u1EA3nh \u0111\u01A1n + STK ng\xE2n h\xE0ng. Shop \u0111\u1ED1i chi\u1EBFu v\xE0 chuy\u1EC3n theo l\u1ECBch.</p></details>
-  </div>
-
-  <div class="card" style="text-align:center">
-    <h2 style="justify-content:center">\u{1F465} Nh\u1EADn ti\u1EC1n ho\xE0n c\u1EE7a b\u1EA1n</h2>
-    <p class="muted" style="margin:0 0 14px">Tham gia Nh\xF3m \u0111\u1EC3 g\u1EEDi \u0111\u01A1n &amp; nh\u1EADn ti\u1EC1n ho\xE0n. C\u1ED9ng \u0111\u1ED3ng c\u1EADp nh\u1EADt deal hot m\u1ED7i ng\xE0y!</p>
-    <a class="btn group" id="grp" href="${FB_GROUP}" target="_blank" rel="noopener">Tham gia Nh\xF3m nh\u1EADn ho\xE0n ti\u1EC1n</a>
-  </div>
-
   <footer>
     Mushoplaho \xB7 Mua L\xE0 Ho\xE0n \xB7 S\u1EA3n ph\u1EA9m ch\xEDnh h\xE3ng t\u1EEB Shopee<br>
     M\u1ECDi giao d\u1ECBch &amp; b\u1EA3o h\xE0nh theo ch\xEDnh s\xE1ch c\u1EE7a Shopee &amp; ng\u01B0\u1EDDi b\xE1n.
   </footer>
 </div>
 <div class="toast" id="toast"></div>
+
+<div class="fab" id="fab" title="Tr\u1EE3 gi\xFAp">?</div>
+<div class="sheet-bg" id="sheetbg"></div>
+<div class="sheet" id="sheet">
+  <div class="sheet-h"><b>H\u01B0\u1EDBng d\u1EABn &amp; h\u1ED7 tr\u1EE3</b><span id="sheetx">\u2715</span></div>
+  <h3>\u{1F4A1} C\xE1ch ho\u1EA1t \u0111\u1ED9ng</h3>
+  <ol class="steps">
+    <li>D\xE1n link Shopee, b\u1EA5m "Nh\u1EADn link ho\xE0n ti\u1EC1n".</li>
+    <li>B\u1EA5m "M\u1EDF Shopee &amp; mua ngay" \u2192 mua nh\u01B0 b\xECnh th\u01B0\u1EDDng.</li>
+    <li>V\xE0o Nh\xF3m \u2192 g\u1EEDi \u1EA3nh \u0111\u01A1n + STK \u2192 nh\u1EADn ho\xE0n 50% hoa h\u1ED3ng.</li>
+  </ol>
+  <h3>\u{1F4B8} L\u1ECBch nh\u1EADn ti\u1EC1n ho\xE0n</h3>
+  <ul class="tl">
+    <li><b>Ng\xE0y 18</b> \u2014 ch\u1ED1t b\xE1o c\xE1o &amp; xin STK (n\u1EBFu l\u1EA7n \u0111\u1EA7u)</li>
+    <li><b>Ng\xE0y 20\u201325</b> \u2014 chuy\u1EC3n ti\u1EC1n ho\xE0n v\xE0o t\xE0i kho\u1EA3n b\u1EA1n</li>
+    <li><b>Ng\xE0y 26</b> \u2014 th\xF4ng b\xE1o ho\xE0n t\u1EA5t</li>
+    <li>Ho\xE0n sau khi Shopee \u0111\u1ED1i so\xE1t (~75\u2013105 ng\xE0y)</li>
+  </ul>
+  <h3>\u2753 C\xE2u h\u1ECFi th\u01B0\u1EDDng g\u1EB7p</h3>
+  <div class="faq">
+    <details><summary>C\xF3 m\u1EA5t ph\xED kh\xF4ng?</summary><p>Ho\xE0n to\xE0n mi\u1EC5n ph\xED. B\u1EA1n ch\u1EC9 d\xE1n link, mua nh\u01B0 b\xECnh th\u01B0\u1EDDng v\xE0 nh\u1EADn l\u1EA1i ti\u1EC1n.</p></details>
+    <details><summary>Bao l\xE2u nh\u1EADn \u0111\u01B0\u1EE3c ti\u1EC1n?</summary><p>Sau khi Shopee \u0111\u1ED1i so\xE1t (~75\u2013105 ng\xE0y), ti\u1EC1n ho\xE0n chuy\u1EC3n v\xE0o ng\xE0y 20\u201325 h\xE0ng th\xE1ng.</p></details>
+    <details><summary>V\xEC sao ph\u1EA3i b\u1EA5m link tr\u01B0\u1EDBc khi mua?</summary><p>Link \u0111\xF3 ghi nh\u1EADn \u0111\u01A1n \u0111\u1EC3 t\xEDnh hoa h\u1ED3ng. Mua kh\xF4ng qua link s\u1EBD kh\xF4ng \u0111\u01B0\u1EE3c ho\xE0n.</p></details>
+    <details><summary>H\xE0ng c\xF3 ch\xEDnh h\xE3ng kh\xF4ng?</summary><p>B\u1EA1n mua th\u1EB3ng tr\xEAn Shopee \u2014 s\u1EA3n ph\u1EA9m, gi\xE1, b\u1EA3o h\xE0nh \u0111\u1EC1u theo Shopee &amp; ng\u01B0\u1EDDi b\xE1n.</p></details>
+    <details><summary>L\xE0m sao nh\u1EADn ti\u1EC1n ho\xE0n?</summary><p>V\xE0o Nh\xF3m Facebook, g\u1EEDi \u1EA3nh \u0111\u01A1n + STK. Shop \u0111\u1ED1i chi\u1EBFu v\xE0 chuy\u1EC3n theo l\u1ECBch.</p></details>
+  </div>
+  <a class="btn group" id="grp" href="${FB_GROUP}" target="_blank" rel="noopener">\u{1F465} Tham gia Nh\xF3m nh\u1EADn ho\xE0n ti\u1EC1n</a>
+  <button class="btn ghost" id="share" type="button" style="margin-top:10px">\u{1F517} Chia s\u1EBB Mushoplaho cho b\u1EA1n b\xE8</button>
+</div>
 
 <script>
 var API=location.origin+'/';var $=function(id){return document.getElementById(id)};
@@ -563,11 +552,6 @@ $('copy').addEventListener('click',function(){var l=buy.dataset.link||buy.href;
   if(navigator.clipboard){navigator.clipboard.writeText(l).then(function(){tst('\u0110\xE3 sao ch\xE9p link \u2705')}).catch(function(){tst(l)})}else tst(l);});
 url.addEventListener('keydown',function(e){if(e.key==='Enter')contact.focus()});
 contact.addEventListener('keydown',function(e){if(e.key==='Enter')go.click()});
-var cv=$('calcv');
-if(cv)cv.addEventListener('input',function(){var v=parseInt((cv.value||'').replace(/\\D/g,''),10)||0;
-  if(v<1000){$('calcout').textContent='Nh\u1EADp gi\xE1 \u0111\u01A1n \u0111\u1EC3 xem s\u1ED1 ti\u1EC1n c\xF3 th\u1EC3 ho\xE0n \u{1F4B8}';return}
-  var lo=Math.round(v*0.02),hi=Math.round(v*0.07);
-  $('calcout').innerHTML='C\xF3 th\u1EC3 ho\xE0n \u2248 <b>'+lo.toLocaleString('vi-VN')+'\u0111 \u2013 '+hi.toLocaleString('vi-VN')+'\u0111</b>';});
 var sh=$('share');
 if(sh)sh.addEventListener('click',function(){var u=location.origin;
   if(navigator.share){navigator.share({title:'Mushoplaho \u2014 Mua L\xE0 Ho\xE0n',text:'Mua Shopee nh\u1EADn l\u1EA1i ti\u1EC1n!',url:u}).catch(function(){})}
@@ -594,6 +578,13 @@ var nb=$('notifybtn');if(nb)nb.addEventListener('click',function(){
      .catch(function(){nb.textContent='\u{1F514} B\xE1o khi ti\u1EC1n v\u1EC1';tst('Kh\xF4ng b\u1EADt \u0111\u01B0\u1EE3c, th\u1EED l\u1EA1i')});
   });
 });
+var fab=$('fab'),sheet=$('sheet'),sbg=$('sheetbg');
+function openSheet(o){if(sheet){sheet.classList.toggle('open',o);sbg.classList.toggle('open',o)}}
+if(fab)fab.addEventListener('click',function(){openSheet(true)});
+if(sbg)sbg.addEventListener('click',function(){openSheet(false)});
+var sx=$('sheetx');if(sx)sx.addEventListener('click',function(){openSheet(false)});
+function tryClip(){if(url.value)return;try{if(navigator.clipboard&&navigator.clipboard.readText){navigator.clipboard.readText().then(function(t){t=(t||'').trim();if(!url.value&&/^https?:\\/\\//.test(t)&&/shopee|shp\\.ee/i.test(t)){url.value=t;tst('\u0110\xE3 t\u1EF1 d\xE1n link Shopee \u{1F4CB}')}}).catch(function(){})}}catch(e){}}
+window.addEventListener('focus',tryClip);setTimeout(tryClip,400);
 loadWallet();loadDeals();
 <\/script>
 </body>
@@ -791,6 +782,14 @@ async function notifyPaid(orderCode, env) {
 }
 __name(notifyPaid, "notifyPaid");
 var index_default = {
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil((async () => {
+      try {
+        await fetch((env.SUPABASE_URL || "") + "/rest/v1/submissions?select=id&limit=1", { headers: { apikey: env.SUPABASE_SERVICE_KEY, "Authorization": "Bearer " + env.SUPABASE_SERVICE_KEY } });
+      } catch (e) {
+      }
+    })());
+  },
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const path = url.pathname;

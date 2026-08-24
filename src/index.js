@@ -322,6 +322,14 @@ const SHOP_HTML = `<!doctype html>
   .deal .dname{font-size:12px;line-height:1.3;height:31px;overflow:hidden;font-weight:600}
   .deal .dprice{color:#FF4E73;font-weight:800;font-size:14px;margin-top:4px}
   .deal .ddisc{display:inline-block;background:#ffeaf0;color:#FF4E73;font-size:11px;font-weight:700;border-radius:6px;padding:1px 6px;margin-top:4px}
+  .fab{position:fixed;right:16px;bottom:20px;width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,var(--o1),var(--o2));color:#fff;font-size:26px;font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(255,90,110,.45);cursor:pointer;z-index:20}
+  .sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);opacity:0;pointer-events:none;transition:.25s;z-index:21}
+  .sheet-bg.open{opacity:1;pointer-events:auto}
+  .sheet{position:fixed;left:0;right:0;bottom:0;max-height:82vh;overflow-y:auto;background:#fff;border-radius:22px 22px 0 0;padding:18px 16px 34px;transform:translateY(101%);transition:transform .28s ease;z-index:22;max-width:600px;margin:0 auto}
+  .sheet.open{transform:translateY(0)}
+  .sheet-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;font-size:17px}
+  .sheet-h span{cursor:pointer;font-size:20px;color:var(--mut);padding:4px 8px}
+  .sheet h3{font-size:15px;margin:16px 0 6px}
 </style>
 </head>
 <body>
@@ -375,60 +383,41 @@ const SHOP_HTML = `<!doctype html>
     </div>
   </div>
 
-  <div class="card">
-    <h2>🧮 Ước tính tiền hoàn</h2>
-    <input id="calcv" type="number" inputmode="numeric" placeholder="Nhập giá trị đơn (đ) — vd 500000">
-    <div class="calc-out" id="calcout">Nhập giá đơn để xem số tiền có thể hoàn 💸</div>
-    <p class="muted">Ước tính ~2–7% giá trị đơn (tuỳ ngành hàng). Số thực nhận theo hoa hồng Shopee đối soát.</p>
-  </div>
-
-  <div class="card">
-    <h2>💡 Cách hoạt động</h2>
-    <ol class="steps">
-      <li>Dán link Shopee + SĐT/Facebook, bấm nút phía trên.</li>
-      <li>Bấm <b>“Mở Shopee &amp; mua ngay”</b> → mua như bình thường.</li>
-      <li>Tham gia Nhóm → gửi ảnh đơn → <b>nhận hoàn 50%</b> hoa hồng.</li>
-    </ol>
-    <p class="muted"><a class="link" href="/track">🔎 Đã có mã đơn? Tra cứu tại đây</a></p>
-  </div>
-
-  <div class="card">
-    <h2>💸 Lịch nhận tiền hoàn</h2>
-    <ul class="tl">
-      <li><b>Ngày 18</b> hàng tháng — chốt báo cáo &amp; xin STK (nếu lần đầu)</li>
-      <li><b>Ngày 20–25</b> — chuyển tiền hoàn vào tài khoản bạn</li>
-      <li><b>Ngày 26</b> — thông báo hoàn tất</li>
-      <li>Đơn được hoàn sau khi Shopee đối soát (~75–105 ngày)</li>
-    </ul>
-  </div>
-
-  <div class="card refer">
-    <h2>🎁 Giới thiệu bạn bè</h2>
-    <p class="muted" style="margin:0 0 10px;text-align:left">Rủ bạn cùng mua hoàn tiền — cộng đồng deal càng mạnh, ưu đãi càng nhiều.</p>
-    <button class="btn ghost" id="share" type="button">🔗 Chia sẻ Mushoplaho</button>
-  </div>
-
-  <div class="card faq">
-    <h2>❓ Câu hỏi thường gặp</h2>
-    <details><summary>Có mất phí không?</summary><p>Hoàn toàn miễn phí. Bạn chỉ dán link, mua như bình thường và nhận lại tiền.</p></details>
-    <details><summary>Bao lâu thì nhận được tiền?</summary><p>Sau khi Shopee đối soát (~75–105 ngày), tiền hoàn chuyển vào ngày 20–25 hàng tháng.</p></details>
-    <details><summary>Vì sao phải bấm link shop gửi trước khi mua?</summary><p>Link đó ghi nhận đơn của bạn để tính hoa hồng. Mua không qua link sẽ không được hoàn.</p></details>
-    <details><summary>Hàng có chính hãng không?</summary><p>Bạn mua thẳng trên Shopee — sản phẩm, giá, bảo hành đều theo Shopee &amp; người bán.</p></details>
-    <details><summary>Làm sao nhận tiền hoàn?</summary><p>Tham gia Nhóm Facebook, gửi ảnh đơn + STK ngân hàng. Shop đối chiếu và chuyển theo lịch.</p></details>
-  </div>
-
-  <div class="card" style="text-align:center">
-    <h2 style="justify-content:center">👥 Nhận tiền hoàn của bạn</h2>
-    <p class="muted" style="margin:0 0 14px">Tham gia Nhóm để gửi đơn &amp; nhận tiền hoàn. Cộng đồng cập nhật deal hot mỗi ngày!</p>
-    <a class="btn group" id="grp" href="${FB_GROUP}" target="_blank" rel="noopener">Tham gia Nhóm nhận hoàn tiền</a>
-  </div>
-
   <footer>
     Mushoplaho · Mua Là Hoàn · Sản phẩm chính hãng từ Shopee<br>
     Mọi giao dịch &amp; bảo hành theo chính sách của Shopee &amp; người bán.
   </footer>
 </div>
 <div class="toast" id="toast"></div>
+
+<div class="fab" id="fab" title="Trợ giúp">?</div>
+<div class="sheet-bg" id="sheetbg"></div>
+<div class="sheet" id="sheet">
+  <div class="sheet-h"><b>Hướng dẫn &amp; hỗ trợ</b><span id="sheetx">✕</span></div>
+  <h3>💡 Cách hoạt động</h3>
+  <ol class="steps">
+    <li>Dán link Shopee, bấm "Nhận link hoàn tiền".</li>
+    <li>Bấm "Mở Shopee &amp; mua ngay" → mua như bình thường.</li>
+    <li>Vào Nhóm → gửi ảnh đơn + STK → nhận hoàn 50% hoa hồng.</li>
+  </ol>
+  <h3>💸 Lịch nhận tiền hoàn</h3>
+  <ul class="tl">
+    <li><b>Ngày 18</b> — chốt báo cáo &amp; xin STK (nếu lần đầu)</li>
+    <li><b>Ngày 20–25</b> — chuyển tiền hoàn vào tài khoản bạn</li>
+    <li><b>Ngày 26</b> — thông báo hoàn tất</li>
+    <li>Hoàn sau khi Shopee đối soát (~75–105 ngày)</li>
+  </ul>
+  <h3>❓ Câu hỏi thường gặp</h3>
+  <div class="faq">
+    <details><summary>Có mất phí không?</summary><p>Hoàn toàn miễn phí. Bạn chỉ dán link, mua như bình thường và nhận lại tiền.</p></details>
+    <details><summary>Bao lâu nhận được tiền?</summary><p>Sau khi Shopee đối soát (~75–105 ngày), tiền hoàn chuyển vào ngày 20–25 hàng tháng.</p></details>
+    <details><summary>Vì sao phải bấm link trước khi mua?</summary><p>Link đó ghi nhận đơn để tính hoa hồng. Mua không qua link sẽ không được hoàn.</p></details>
+    <details><summary>Hàng có chính hãng không?</summary><p>Bạn mua thẳng trên Shopee — sản phẩm, giá, bảo hành đều theo Shopee &amp; người bán.</p></details>
+    <details><summary>Làm sao nhận tiền hoàn?</summary><p>Vào Nhóm Facebook, gửi ảnh đơn + STK. Shop đối chiếu và chuyển theo lịch.</p></details>
+  </div>
+  <a class="btn group" id="grp" href="${FB_GROUP}" target="_blank" rel="noopener">👥 Tham gia Nhóm nhận hoàn tiền</a>
+  <button class="btn ghost" id="share" type="button" style="margin-top:10px">🔗 Chia sẻ Mushoplaho cho bạn bè</button>
+</div>
 
 <script>
 var API=location.origin+'/';var $=function(id){return document.getElementById(id)};
@@ -476,11 +465,6 @@ $('copy').addEventListener('click',function(){var l=buy.dataset.link||buy.href;
   if(navigator.clipboard){navigator.clipboard.writeText(l).then(function(){tst('Đã sao chép link ✅')}).catch(function(){tst(l)})}else tst(l);});
 url.addEventListener('keydown',function(e){if(e.key==='Enter')contact.focus()});
 contact.addEventListener('keydown',function(e){if(e.key==='Enter')go.click()});
-var cv=$('calcv');
-if(cv)cv.addEventListener('input',function(){var v=parseInt((cv.value||'').replace(/\\D/g,''),10)||0;
-  if(v<1000){$('calcout').textContent='Nhập giá đơn để xem số tiền có thể hoàn 💸';return}
-  var lo=Math.round(v*0.02),hi=Math.round(v*0.07);
-  $('calcout').innerHTML='Có thể hoàn ≈ <b>'+lo.toLocaleString('vi-VN')+'đ – '+hi.toLocaleString('vi-VN')+'đ</b>';});
 var sh=$('share');
 if(sh)sh.addEventListener('click',function(){var u=location.origin;
   if(navigator.share){navigator.share({title:'Mushoplaho — Mua Là Hoàn',text:'Mua Shopee nhận lại tiền!',url:u}).catch(function(){})}
@@ -507,6 +491,13 @@ var nb=$('notifybtn');if(nb)nb.addEventListener('click',function(){
      .catch(function(){nb.textContent='🔔 Báo khi tiền về';tst('Không bật được, thử lại')});
   });
 });
+var fab=$('fab'),sheet=$('sheet'),sbg=$('sheetbg');
+function openSheet(o){if(sheet){sheet.classList.toggle('open',o);sbg.classList.toggle('open',o)}}
+if(fab)fab.addEventListener('click',function(){openSheet(true)});
+if(sbg)sbg.addEventListener('click',function(){openSheet(false)});
+var sx=$('sheetx');if(sx)sx.addEventListener('click',function(){openSheet(false)});
+function tryClip(){if(url.value)return;try{if(navigator.clipboard&&navigator.clipboard.readText){navigator.clipboard.readText().then(function(t){t=(t||'').trim();if(!url.value&&/^https?:\\/\\//.test(t)&&/shopee|shp\\.ee/i.test(t)){url.value=t;tst('Đã tự dán link Shopee 📋')}}).catch(function(){})}}catch(e){}}
+window.addEventListener('focus',tryClip);setTimeout(tryClip,400);
 loadWallet();loadDeals();
 <\/script>
 </body>
@@ -689,6 +680,12 @@ async function notifyPaid(orderCode, env) {
 }
 
 export default {
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil((async () => {
+      try { await fetch((env.SUPABASE_URL || '') + '/rest/v1/submissions?select=id&limit=1', { headers: { apikey: env.SUPABASE_SERVICE_KEY, 'Authorization': 'Bearer ' + env.SUPABASE_SERVICE_KEY } }); } catch (e) {}
+    })());
+  },
+
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const path = url.pathname;

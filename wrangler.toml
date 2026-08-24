@@ -2,3 +2,6 @@ name = "mushoplaho"
 main = "src/index.js"
 compatibility_date = "2026-08-01"
 # Không cần binding gì thêm — tất cả secret set bằng: wrangler secret put <NAME>
+
+[triggers]
+crons = ["0 6 * * *"]
