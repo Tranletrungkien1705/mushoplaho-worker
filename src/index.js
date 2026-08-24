@@ -112,7 +112,7 @@ async function supabaseFind(q, env) {
 async function supabaseList(env, limit) {
   if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY) return [];
   try {
-    const r = await fetch(env.SUPABASE_URL + `/rest/v1/submissions?select=order_code,contact,platform,status,original_url,created_at&order=id.desc&limit=${limit || 50}`, {
+    const r = await fetch(env.SUPABASE_URL + `/rest/v1/submissions?select=order_code,contact,bank_info,admin_note,platform,status,original_url,created_at&order=id.desc&limit=${limit || 50}`, {
       headers: { apikey: env.SUPABASE_SERVICE_KEY, 'Authorization': 'Bearer ' + env.SUPABASE_SERVICE_KEY }
     });
     if (!r.ok) return [];
@@ -120,13 +120,16 @@ async function supabaseList(env, limit) {
   } catch (e) { return []; }
 }
 
-async function supabaseUpdate(orderCode, status, env) {
+async function supabaseUpdate(orderCode, patch, env) {
   if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY || !orderCode) return false;
+  const clean = {};
+  ['status', 'bank_info', 'admin_note'].forEach(k => { if (patch && patch[k] !== undefined) clean[k] = patch[k]; });
+  if (!Object.keys(clean).length) return false;
   try {
     const r = await fetch(env.SUPABASE_URL + `/rest/v1/submissions?order_code=eq.${encodeURIComponent(orderCode)}`, {
       method: 'PATCH',
       headers: { apikey: env.SUPABASE_SERVICE_KEY, 'Authorization': 'Bearer ' + env.SUPABASE_SERVICE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-      body: JSON.stringify({ status })
+      body: JSON.stringify(clean)
     });
     return r.ok;
   } catch (e) { return false; }
@@ -261,6 +264,23 @@ const SHOP_HTML = `<!doctype html>
   .toast.show{transform:translateX(-50%) translateY(0);opacity:1}
   footer{text-align:center;color:var(--mut);font-size:12px;margin-top:24px;line-height:1.7}
   a.link{color:#FF6B3D;font-weight:700;text-decoration:none}
+  .calc-in{display:flex;gap:8px;align-items:center;margin-top:0}
+  .calc-in input{margin-top:0}
+  .calc-out{margin-top:12px;background:#eafff3;border:1px solid #b7f0cf;border-radius:14px;padding:14px;text-align:center;font-weight:800;color:#039855}
+  .calc-out b{font-size:22px}
+  .tl{list-style:none;margin-top:4px}
+  .tl li{position:relative;padding:0 0 16px 26px;border-left:2px solid #ffd9c9;margin-left:6px;font-size:14px}
+  .tl li:last-child{border-left-color:transparent;padding-bottom:0}
+  .tl li::before{content:'';position:absolute;left:-8px;top:2px;width:14px;height:14px;border-radius:50%;background:linear-gradient(135deg,var(--o1),var(--o2))}
+  .tl b{color:#FF4E73}
+  .faq details{border-bottom:1px solid #ffe3d6;padding:12px 0}
+  .faq details:last-child{border:none}
+  .faq summary{font-weight:700;cursor:pointer;list-style:none;display:flex;justify-content:space-between;gap:10px}
+  .faq summary::-webkit-details-marker{display:none}
+  .faq summary::after{content:'+';color:var(--o2);font-weight:800}
+  .faq details[open] summary::after{content:'\\2212'}
+  .faq p{color:#555;font-size:14px;margin-top:8px}
+  .refer{background:linear-gradient(135deg,#eef4ff,#fff);border:1px dashed #a9c2ff}
 </style>
 </head>
 <body>
@@ -296,13 +316,45 @@ const SHOP_HTML = `<!doctype html>
   </div>
 
   <div class="card">
+    <h2>🧮 Ước tính tiền hoàn</h2>
+    <input id="calcv" type="number" inputmode="numeric" placeholder="Nhập giá trị đơn (đ) — vd 500000">
+    <div class="calc-out" id="calcout">Nhập giá đơn để xem số tiền có thể hoàn 💸</div>
+    <p class="muted">Ước tính ~2–7% giá trị đơn (tuỳ ngành hàng). Số thực nhận theo hoa hồng Shopee đối soát.</p>
+  </div>
+
+  <div class="card">
     <h2>💡 Cách hoạt động</h2>
     <ol class="steps">
       <li>Dán link Shopee + SĐT/Facebook, bấm nút phía trên.</li>
       <li>Bấm <b>“Mở Shopee &amp; mua ngay”</b> → mua như bình thường.</li>
-      <li>Tham gia Nhóm → gửi ảnh đơn → <b>nhận hoàn 50%</b> (${PAYOUT}).</li>
+      <li>Tham gia Nhóm → gửi ảnh đơn → <b>nhận hoàn 50%</b> hoa hồng.</li>
     </ol>
     <p class="muted"><a class="link" href="/track">🔎 Đã có mã đơn? Tra cứu tại đây</a></p>
+  </div>
+
+  <div class="card">
+    <h2>💸 Lịch nhận tiền hoàn</h2>
+    <ul class="tl">
+      <li><b>Ngày 18</b> hàng tháng — chốt báo cáo &amp; xin STK (nếu lần đầu)</li>
+      <li><b>Ngày 20–25</b> — chuyển tiền hoàn vào tài khoản bạn</li>
+      <li><b>Ngày 26</b> — thông báo hoàn tất</li>
+      <li>Đơn được hoàn sau khi Shopee đối soát (~75–105 ngày)</li>
+    </ul>
+  </div>
+
+  <div class="card refer">
+    <h2>🎁 Giới thiệu bạn bè</h2>
+    <p class="muted" style="margin:0 0 10px;text-align:left">Rủ bạn cùng mua hoàn tiền — cộng đồng deal càng mạnh, ưu đãi càng nhiều.</p>
+    <button class="btn ghost" id="share" type="button">🔗 Chia sẻ Mushoplaho</button>
+  </div>
+
+  <div class="card faq">
+    <h2>❓ Câu hỏi thường gặp</h2>
+    <details><summary>Có mất phí không?</summary><p>Hoàn toàn miễn phí. Bạn chỉ dán link, mua như bình thường và nhận lại tiền.</p></details>
+    <details><summary>Bao lâu thì nhận được tiền?</summary><p>Sau khi Shopee đối soát (~75–105 ngày), tiền hoàn chuyển vào ngày 20–25 hàng tháng.</p></details>
+    <details><summary>Vì sao phải bấm link shop gửi trước khi mua?</summary><p>Link đó ghi nhận đơn của bạn để tính hoa hồng. Mua không qua link sẽ không được hoàn.</p></details>
+    <details><summary>Hàng có chính hãng không?</summary><p>Bạn mua thẳng trên Shopee — sản phẩm, giá, bảo hành đều theo Shopee &amp; người bán.</p></details>
+    <details><summary>Làm sao nhận tiền hoàn?</summary><p>Tham gia Nhóm Facebook, gửi ảnh đơn + STK ngân hàng. Shop đối chiếu và chuyển theo lịch.</p></details>
   </div>
 
   <div class="card" style="text-align:center">
@@ -346,6 +398,15 @@ $('copy').addEventListener('click',function(){var l=buy.dataset.link||buy.href;
   if(navigator.clipboard){navigator.clipboard.writeText(l).then(function(){tst('Đã sao chép link ✅')}).catch(function(){tst(l)})}else tst(l);});
 url.addEventListener('keydown',function(e){if(e.key==='Enter')contact.focus()});
 contact.addEventListener('keydown',function(e){if(e.key==='Enter')go.click()});
+var cv=$('calcv');
+if(cv)cv.addEventListener('input',function(){var v=parseInt((cv.value||'').replace(/\\D/g,''),10)||0;
+  if(v<1000){$('calcout').textContent='Nhập giá đơn để xem số tiền có thể hoàn 💸';return}
+  var lo=Math.round(v*0.02),hi=Math.round(v*0.07);
+  $('calcout').innerHTML='Có thể hoàn ≈ <b>'+lo.toLocaleString('vi-VN')+'đ – '+hi.toLocaleString('vi-VN')+'đ</b>';});
+var sh=$('share');
+if(sh)sh.addEventListener('click',function(){var u=location.origin;
+  if(navigator.share){navigator.share({title:'Mushoplaho — Mua Là Hoàn',text:'Mua Shopee nhận lại tiền!',url:u}).catch(function(){})}
+  else if(navigator.clipboard){navigator.clipboard.writeText(u).then(function(){tst('Đã sao chép link ✅')})}else tst(u);});
 fetch(API+'shop-stats').then(function(r){return r.json()}).then(function(d){var n=(d&&d.count!=null)?d.count:0;if(n<50)n=50+n;
   $('proof').textContent='🔥 Đã tạo '+n.toLocaleString('vi-VN')+' link hoàn tiền cho khách';})
  .catch(function(){$('proof').textContent='🔥 Cộng đồng hoàn tiền đang lớn mỗi ngày'});
@@ -433,7 +494,7 @@ const ADMIN_HTML = `<!doctype html>
       <div class="bar"><input id="filter" placeholder="Lọc mã/SĐT/sàn" style="width:200px"><button class="sm" id="reload">Tải lại</button></div>
     </div>
     <div class="ov"><table id="tbl"><thead><tr>
-      <th>Mã đơn</th><th>Liên hệ</th><th>Sàn</th><th>Ngày</th><th>Trạng thái</th><th></th><th>Link</th>
+      <th>Mã đơn</th><th>Liên hệ</th><th>STK ngân hàng</th><th>Sàn</th><th>Trạng thái</th><th>Ghi chú</th><th></th><th>Link</th>
     </tr></thead><tbody></tbody></table></div>
   </div>
 </div>
@@ -455,14 +516,18 @@ function render(rows){
   $('cnt').textContent=list.length;
   $('tbl').tBodies[0].innerHTML=list.map(function(r){
     var d=r.created_at?String(r.created_at).slice(0,10):'';
-    return '<tr><td><b>'+esc(r.order_code)+'</b></td><td>'+esc(r.contact)+'</td><td>'+esc(r.platform)+'</td><td class="mut">'+d+'</td>'
+    return '<tr><td><b>'+esc(r.order_code)+'</b><div class="mut">'+d+'</div></td><td>'+esc(r.contact)+'</td>'
+      +'<td><input class="stk" data-c="'+esc(r.order_code)+'" value="'+esc(r.bank_info)+'" placeholder="STK / NH / tên" style="width:160px"></td>'
+      +'<td>'+esc(r.platform)+'</td>'
       +'<td><select data-c="'+esc(r.order_code)+'">'+opts(r.status)+'</select></td>'
+      +'<td><input class="note" data-c="'+esc(r.order_code)+'" value="'+esc(r.admin_note)+'" placeholder="ghi chú" style="width:120px"></td>'
       +'<td><button class="sm" data-save="'+esc(r.order_code)+'">Lưu</button></td>'
       +'<td><a href="'+esc(r.original_url)+'" target="_blank">xem</a></td></tr>';
   }).join('');
   Array.prototype.forEach.call(document.querySelectorAll('[data-save]'),function(b){b.onclick=function(){
     var code=b.getAttribute('data-save');var sel=document.querySelector('select[data-c="'+code+'"]');
-    b.textContent='...';fetch('/admin-update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS,order_code:code,status:sel.value})})
+    var stk=document.querySelector('input.stk[data-c="'+code+'"]');var note=document.querySelector('input.note[data-c="'+code+'"]');
+    b.textContent='...';fetch('/admin-update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS,order_code:code,status:sel.value,bank_info:stk?stk.value:undefined,admin_note:note?note.value:undefined})})
      .then(function(r){return r.json()}).then(function(d){b.textContent=d.ok?'✓':'lỗi';setTimeout(function(){b.textContent='Lưu'},1200)});
   }});
 }
@@ -542,7 +607,7 @@ export default {
     if (request.method === 'POST' && path === '/admin-update') {
       const body = await request.json().catch(() => ({}));
       if (!checkAdmin(body.pass, env)) return json({ error: 'unauthorized' }, 401);
-      return json({ ok: await supabaseUpdate(body.order_code, body.status, env) });
+      return json({ ok: await supabaseUpdate(body.order_code, body, env) });
     }
 
     // Social proof counter

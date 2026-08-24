@@ -105,7 +105,7 @@ __name(supabaseFind, "supabaseFind");
 async function supabaseList(env, limit) {
   if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY) return [];
   try {
-    const r = await fetch(env.SUPABASE_URL + `/rest/v1/submissions?select=order_code,contact,platform,status,original_url,created_at&order=id.desc&limit=${limit || 50}`, {
+    const r = await fetch(env.SUPABASE_URL + `/rest/v1/submissions?select=order_code,contact,bank_info,admin_note,platform,status,original_url,created_at&order=id.desc&limit=${limit || 50}`, {
       headers: { apikey: env.SUPABASE_SERVICE_KEY, "Authorization": "Bearer " + env.SUPABASE_SERVICE_KEY }
     });
     if (!r.ok) return [];
@@ -115,13 +115,18 @@ async function supabaseList(env, limit) {
   }
 }
 __name(supabaseList, "supabaseList");
-async function supabaseUpdate(orderCode, status, env) {
+async function supabaseUpdate(orderCode, patch, env) {
   if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY || !orderCode) return false;
+  const clean = {};
+  ["status", "bank_info", "admin_note"].forEach((k) => {
+    if (patch && patch[k] !== void 0) clean[k] = patch[k];
+  });
+  if (!Object.keys(clean).length) return false;
   try {
     const r = await fetch(env.SUPABASE_URL + `/rest/v1/submissions?order_code=eq.${encodeURIComponent(orderCode)}`, {
       method: "PATCH",
       headers: { apikey: env.SUPABASE_SERVICE_KEY, "Authorization": "Bearer " + env.SUPABASE_SERVICE_KEY, "Content-Type": "application/json", "Prefer": "return=minimal" },
-      body: JSON.stringify({ status })
+      body: JSON.stringify(clean)
     });
     return r.ok;
   } catch (e) {
@@ -262,6 +267,23 @@ var SHOP_HTML = `<!doctype html>
   .toast.show{transform:translateX(-50%) translateY(0);opacity:1}
   footer{text-align:center;color:var(--mut);font-size:12px;margin-top:24px;line-height:1.7}
   a.link{color:#FF6B3D;font-weight:700;text-decoration:none}
+  .calc-in{display:flex;gap:8px;align-items:center;margin-top:0}
+  .calc-in input{margin-top:0}
+  .calc-out{margin-top:12px;background:#eafff3;border:1px solid #b7f0cf;border-radius:14px;padding:14px;text-align:center;font-weight:800;color:#039855}
+  .calc-out b{font-size:22px}
+  .tl{list-style:none;margin-top:4px}
+  .tl li{position:relative;padding:0 0 16px 26px;border-left:2px solid #ffd9c9;margin-left:6px;font-size:14px}
+  .tl li:last-child{border-left-color:transparent;padding-bottom:0}
+  .tl li::before{content:'';position:absolute;left:-8px;top:2px;width:14px;height:14px;border-radius:50%;background:linear-gradient(135deg,var(--o1),var(--o2))}
+  .tl b{color:#FF4E73}
+  .faq details{border-bottom:1px solid #ffe3d6;padding:12px 0}
+  .faq details:last-child{border:none}
+  .faq summary{font-weight:700;cursor:pointer;list-style:none;display:flex;justify-content:space-between;gap:10px}
+  .faq summary::-webkit-details-marker{display:none}
+  .faq summary::after{content:'+';color:var(--o2);font-weight:800}
+  .faq details[open] summary::after{content:'\\2212'}
+  .faq p{color:#555;font-size:14px;margin-top:8px}
+  .refer{background:linear-gradient(135deg,#eef4ff,#fff);border:1px dashed #a9c2ff}
 </style>
 </head>
 <body>
@@ -297,13 +319,45 @@ var SHOP_HTML = `<!doctype html>
   </div>
 
   <div class="card">
+    <h2>\u{1F9EE} \u01AF\u1EDBc t\xEDnh ti\u1EC1n ho\xE0n</h2>
+    <input id="calcv" type="number" inputmode="numeric" placeholder="Nh\u1EADp gi\xE1 tr\u1ECB \u0111\u01A1n (\u0111) \u2014 vd 500000">
+    <div class="calc-out" id="calcout">Nh\u1EADp gi\xE1 \u0111\u01A1n \u0111\u1EC3 xem s\u1ED1 ti\u1EC1n c\xF3 th\u1EC3 ho\xE0n \u{1F4B8}</div>
+    <p class="muted">\u01AF\u1EDBc t\xEDnh ~2\u20137% gi\xE1 tr\u1ECB \u0111\u01A1n (tu\u1EF3 ng\xE0nh h\xE0ng). S\u1ED1 th\u1EF1c nh\u1EADn theo hoa h\u1ED3ng Shopee \u0111\u1ED1i so\xE1t.</p>
+  </div>
+
+  <div class="card">
     <h2>\u{1F4A1} C\xE1ch ho\u1EA1t \u0111\u1ED9ng</h2>
     <ol class="steps">
       <li>D\xE1n link Shopee + S\u0110T/Facebook, b\u1EA5m n\xFAt ph\xEDa tr\xEAn.</li>
       <li>B\u1EA5m <b>\u201CM\u1EDF Shopee &amp; mua ngay\u201D</b> \u2192 mua nh\u01B0 b\xECnh th\u01B0\u1EDDng.</li>
-      <li>Tham gia Nh\xF3m \u2192 g\u1EEDi \u1EA3nh \u0111\u01A1n \u2192 <b>nh\u1EADn ho\xE0n 50%</b> (${PAYOUT}).</li>
+      <li>Tham gia Nh\xF3m \u2192 g\u1EEDi \u1EA3nh \u0111\u01A1n \u2192 <b>nh\u1EADn ho\xE0n 50%</b> hoa h\u1ED3ng.</li>
     </ol>
     <p class="muted"><a class="link" href="/track">\u{1F50E} \u0110\xE3 c\xF3 m\xE3 \u0111\u01A1n? Tra c\u1EE9u t\u1EA1i \u0111\xE2y</a></p>
+  </div>
+
+  <div class="card">
+    <h2>\u{1F4B8} L\u1ECBch nh\u1EADn ti\u1EC1n ho\xE0n</h2>
+    <ul class="tl">
+      <li><b>Ng\xE0y 18</b> h\xE0ng th\xE1ng \u2014 ch\u1ED1t b\xE1o c\xE1o &amp; xin STK (n\u1EBFu l\u1EA7n \u0111\u1EA7u)</li>
+      <li><b>Ng\xE0y 20\u201325</b> \u2014 chuy\u1EC3n ti\u1EC1n ho\xE0n v\xE0o t\xE0i kho\u1EA3n b\u1EA1n</li>
+      <li><b>Ng\xE0y 26</b> \u2014 th\xF4ng b\xE1o ho\xE0n t\u1EA5t</li>
+      <li>\u0110\u01A1n \u0111\u01B0\u1EE3c ho\xE0n sau khi Shopee \u0111\u1ED1i so\xE1t (~75\u2013105 ng\xE0y)</li>
+    </ul>
+  </div>
+
+  <div class="card refer">
+    <h2>\u{1F381} Gi\u1EDBi thi\u1EC7u b\u1EA1n b\xE8</h2>
+    <p class="muted" style="margin:0 0 10px;text-align:left">R\u1EE7 b\u1EA1n c\xF9ng mua ho\xE0n ti\u1EC1n \u2014 c\u1ED9ng \u0111\u1ED3ng deal c\xE0ng m\u1EA1nh, \u01B0u \u0111\xE3i c\xE0ng nhi\u1EC1u.</p>
+    <button class="btn ghost" id="share" type="button">\u{1F517} Chia s\u1EBB Mushoplaho</button>
+  </div>
+
+  <div class="card faq">
+    <h2>\u2753 C\xE2u h\u1ECFi th\u01B0\u1EDDng g\u1EB7p</h2>
+    <details><summary>C\xF3 m\u1EA5t ph\xED kh\xF4ng?</summary><p>Ho\xE0n to\xE0n mi\u1EC5n ph\xED. B\u1EA1n ch\u1EC9 d\xE1n link, mua nh\u01B0 b\xECnh th\u01B0\u1EDDng v\xE0 nh\u1EADn l\u1EA1i ti\u1EC1n.</p></details>
+    <details><summary>Bao l\xE2u th\xEC nh\u1EADn \u0111\u01B0\u1EE3c ti\u1EC1n?</summary><p>Sau khi Shopee \u0111\u1ED1i so\xE1t (~75\u2013105 ng\xE0y), ti\u1EC1n ho\xE0n chuy\u1EC3n v\xE0o ng\xE0y 20\u201325 h\xE0ng th\xE1ng.</p></details>
+    <details><summary>V\xEC sao ph\u1EA3i b\u1EA5m link shop g\u1EEDi tr\u01B0\u1EDBc khi mua?</summary><p>Link \u0111\xF3 ghi nh\u1EADn \u0111\u01A1n c\u1EE7a b\u1EA1n \u0111\u1EC3 t\xEDnh hoa h\u1ED3ng. Mua kh\xF4ng qua link s\u1EBD kh\xF4ng \u0111\u01B0\u1EE3c ho\xE0n.</p></details>
+    <details><summary>H\xE0ng c\xF3 ch\xEDnh h\xE3ng kh\xF4ng?</summary><p>B\u1EA1n mua th\u1EB3ng tr\xEAn Shopee \u2014 s\u1EA3n ph\u1EA9m, gi\xE1, b\u1EA3o h\xE0nh \u0111\u1EC1u theo Shopee &amp; ng\u01B0\u1EDDi b\xE1n.</p></details>
+    <details><summary>L\xE0m sao nh\u1EADn ti\u1EC1n ho\xE0n?</summary><p>Tham gia Nh\xF3m Facebook, g\u1EEDi \u1EA3nh \u0111\u01A1n + STK ng\xE2n h\xE0ng. Shop \u0111\u1ED1i chi\u1EBFu v\xE0 chuy\u1EC3n theo l\u1ECBch.</p></details>
   </div>
 
   <div class="card" style="text-align:center">
@@ -347,6 +401,15 @@ $('copy').addEventListener('click',function(){var l=buy.dataset.link||buy.href;
   if(navigator.clipboard){navigator.clipboard.writeText(l).then(function(){tst('\u0110\xE3 sao ch\xE9p link \u2705')}).catch(function(){tst(l)})}else tst(l);});
 url.addEventListener('keydown',function(e){if(e.key==='Enter')contact.focus()});
 contact.addEventListener('keydown',function(e){if(e.key==='Enter')go.click()});
+var cv=$('calcv');
+if(cv)cv.addEventListener('input',function(){var v=parseInt((cv.value||'').replace(/\\D/g,''),10)||0;
+  if(v<1000){$('calcout').textContent='Nh\u1EADp gi\xE1 \u0111\u01A1n \u0111\u1EC3 xem s\u1ED1 ti\u1EC1n c\xF3 th\u1EC3 ho\xE0n \u{1F4B8}';return}
+  var lo=Math.round(v*0.02),hi=Math.round(v*0.07);
+  $('calcout').innerHTML='C\xF3 th\u1EC3 ho\xE0n \u2248 <b>'+lo.toLocaleString('vi-VN')+'\u0111 \u2013 '+hi.toLocaleString('vi-VN')+'\u0111</b>';});
+var sh=$('share');
+if(sh)sh.addEventListener('click',function(){var u=location.origin;
+  if(navigator.share){navigator.share({title:'Mushoplaho \u2014 Mua L\xE0 Ho\xE0n',text:'Mua Shopee nh\u1EADn l\u1EA1i ti\u1EC1n!',url:u}).catch(function(){})}
+  else if(navigator.clipboard){navigator.clipboard.writeText(u).then(function(){tst('\u0110\xE3 sao ch\xE9p link \u2705')})}else tst(u);});
 fetch(API+'shop-stats').then(function(r){return r.json()}).then(function(d){var n=(d&&d.count!=null)?d.count:0;if(n<50)n=50+n;
   $('proof').textContent='\u{1F525} \u0110\xE3 t\u1EA1o '+n.toLocaleString('vi-VN')+' link ho\xE0n ti\u1EC1n cho kh\xE1ch';})
  .catch(function(){$('proof').textContent='\u{1F525} C\u1ED9ng \u0111\u1ED3ng ho\xE0n ti\u1EC1n \u0111ang l\u1EDBn m\u1ED7i ng\xE0y'});
@@ -432,7 +495,7 @@ var ADMIN_HTML = `<!doctype html>
       <div class="bar"><input id="filter" placeholder="L\u1ECDc m\xE3/S\u0110T/s\xE0n" style="width:200px"><button class="sm" id="reload">T\u1EA3i l\u1EA1i</button></div>
     </div>
     <div class="ov"><table id="tbl"><thead><tr>
-      <th>M\xE3 \u0111\u01A1n</th><th>Li\xEAn h\u1EC7</th><th>S\xE0n</th><th>Ng\xE0y</th><th>Tr\u1EA1ng th\xE1i</th><th></th><th>Link</th>
+      <th>M\xE3 \u0111\u01A1n</th><th>Li\xEAn h\u1EC7</th><th>STK ng\xE2n h\xE0ng</th><th>S\xE0n</th><th>Tr\u1EA1ng th\xE1i</th><th>Ghi ch\xFA</th><th></th><th>Link</th>
     </tr></thead><tbody></tbody></table></div>
   </div>
 </div>
@@ -454,14 +517,18 @@ function render(rows){
   $('cnt').textContent=list.length;
   $('tbl').tBodies[0].innerHTML=list.map(function(r){
     var d=r.created_at?String(r.created_at).slice(0,10):'';
-    return '<tr><td><b>'+esc(r.order_code)+'</b></td><td>'+esc(r.contact)+'</td><td>'+esc(r.platform)+'</td><td class="mut">'+d+'</td>'
+    return '<tr><td><b>'+esc(r.order_code)+'</b><div class="mut">'+d+'</div></td><td>'+esc(r.contact)+'</td>'
+      +'<td><input class="stk" data-c="'+esc(r.order_code)+'" value="'+esc(r.bank_info)+'" placeholder="STK / NH / t\xEAn" style="width:160px"></td>'
+      +'<td>'+esc(r.platform)+'</td>'
       +'<td><select data-c="'+esc(r.order_code)+'">'+opts(r.status)+'</select></td>'
+      +'<td><input class="note" data-c="'+esc(r.order_code)+'" value="'+esc(r.admin_note)+'" placeholder="ghi ch\xFA" style="width:120px"></td>'
       +'<td><button class="sm" data-save="'+esc(r.order_code)+'">L\u01B0u</button></td>'
       +'<td><a href="'+esc(r.original_url)+'" target="_blank">xem</a></td></tr>';
   }).join('');
   Array.prototype.forEach.call(document.querySelectorAll('[data-save]'),function(b){b.onclick=function(){
     var code=b.getAttribute('data-save');var sel=document.querySelector('select[data-c="'+code+'"]');
-    b.textContent='...';fetch('/admin-update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS,order_code:code,status:sel.value})})
+    var stk=document.querySelector('input.stk[data-c="'+code+'"]');var note=document.querySelector('input.note[data-c="'+code+'"]');
+    b.textContent='...';fetch('/admin-update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS,order_code:code,status:sel.value,bank_info:stk?stk.value:undefined,admin_note:note?note.value:undefined})})
      .then(function(r){return r.json()}).then(function(d){b.textContent=d.ok?'\u2713':'l\u1ED7i';setTimeout(function(){b.textContent='L\u01B0u'},1200)});
   }});
 }
@@ -536,7 +603,7 @@ var index_default = {
     if (request.method === "POST" && path === "/admin-update") {
       const body = await request.json().catch(() => ({}));
       if (!checkAdmin(body.pass, env)) return json({ error: "unauthorized" }, 401);
-      return json({ ok: await supabaseUpdate(body.order_code, body.status, env) });
+      return json({ ok: await supabaseUpdate(body.order_code, body, env) });
     }
     if (request.method === "GET" && path === "/shop-stats") {
       let count = 0;
