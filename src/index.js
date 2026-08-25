@@ -577,7 +577,8 @@ go.addEventListener('click',function(){
   var u=(url.value||'').trim(),c=(contact.value||'').trim();
   if(!/^https?:\\/\\//.test(u)){fail('Bạn hãy dán 1 link sản phẩm Shopee hợp lệ nhé.');return}
   var old=go.textContent;go.innerHTML='<span class="spin"></span> Đang tạo link...';go.disabled=true;
-  fetch(API+'shop-convert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:u,contact:c,uid:UID})})
+  var refv='';try{refv=localStorage.getItem('mlh_ref')||''}catch(e){}
+  fetch(API+'shop-convert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:u,contact:c,uid:UID,ref:refv})})
    .then(function(r){return r.json()})
    .then(function(d){go.textContent=old;go.disabled=false;
      if(d&&d.buy_url){buy.href=d.buy_url;buy.dataset.link=d.buy_url;$('ocode').textContent=d.order_code||'';
@@ -908,7 +909,10 @@ export default {
       const contact = contactRaw.length >= 4 ? contactRaw : (uid ? 'dev:' + uid : 'web');
       const code = genOrderCode();
       const { platform, aff } = await makeAffiliate(u, env, code);
-      await supabaseInsert({ buyer_psid: 'web', buyer_text: 'web', contact, order_code: code, original_url: u, platform, affiliate_url: aff, status: 'web' }, env);
+      const ref = (body.ref || '').trim().slice(0, 40);
+      const row = { buyer_psid: 'web', buyer_text: 'web', contact, order_code: code, original_url: u, platform, affiliate_url: aff, status: 'web' };
+      if (ref && ref !== uid) row.ref_by = ref;   // ai gioi thieu don nay
+      await supabaseInsert(row, env);
       return json({ buy_url: aff, order_code: code });
     }
 
