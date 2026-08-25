@@ -120,6 +120,27 @@ async function autoPostToday(env) {
   } catch (e) { return { ok: false, error: String(e) }; }
 }
 
+// Dang 1 DEAL HOT that (san pham Shopee giam gia) len Page
+async function postHotDeal(env) {
+  if (!env.FB_PAGE_POST_TOKEN) return { ok: false, error: 'no token' };
+  try {
+    const r = await fetch('https://api.accesstrade.vn/v1/datafeeds?merchant=shopee&limit=50', { headers: { 'Authorization': 'Token ' + (env.ACCESSTRADE_TOKEN || '') } });
+    const j = await r.json().catch(() => ({}));
+    let items = ((j && j.data) || []).filter(p => p && p.image && p.aff_link && p.name);
+    items.sort((a, b) => (b.discount_rate || 0) - (a.discount_rate || 0));
+    if (!items.length) return { ok: false, error: 'no deals' };
+    const idx = Math.floor(Date.now() / 3600000) % Math.min(items.length, 25);
+    const p = items[idx];
+    const price = (parseInt(p.price, 10) || 0).toLocaleString('vi-VN');
+    const disc = Math.round(p.discount_rate || 0);
+    const caption = `🔥 DEAL HOT HÔM NAY 🔥\n${p.name}\n💰 Giá: ${price}đ${disc > 0 ? ` — GIẢM ${disc}%` : ''}${p.shop_name ? `\n🏪 ${p.shop_name}` : ''}\n\n💸 Mua qua Mushoplaho để được HOÀN 50% hoa hồng!\n👉 Dán link vào: mushoplaho.kientlt59.workers.dev\nHoặc mua ngay: ${p.aff_link}\n\n#dealhot #shopee #hoantien #sansale`;
+    const form = new URLSearchParams({ url: p.image, caption, access_token: env.FB_PAGE_POST_TOKEN });
+    const fr = await fetch('https://graph.facebook.com/v19.0/1240334605834446/photos', { method: 'POST', body: form });
+    const fj = await fr.json().catch(() => ({}));
+    return fj.id ? { ok: true, id: fj.id, product: p.name } : { ok: false, error: (fj.error && fj.error.message) || 'err' };
+  } catch (e) { return { ok: false, error: String(e) }; }
+}
+
 // Deal hot: tu dong keo tu AccessTrade datafeeds (Shopee) + cache 30'
 async function dealsResponse(env, ctx) {
   const cache = caches.default;
@@ -796,6 +817,7 @@ const ADMIN_HTML = `<!doctype html>
     </div>
     <button class="sm" id="fbpost" style="margin-top:8px">📤 Đăng bài này lên Page</button>
     <button class="sm" id="autopost" style="margin-top:8px;background:#039855">📅 Đăng nội dung hôm nay</button>
+    <button class="sm" id="dealpost" style="margin-top:8px;background:#FF4E73">🔥 Đăng DEAL HOT lên Page</button>
     <span class="mut" id="fbresult" style="margin-left:10px"></span>
     <p class="mut" style="margin-top:6px">🤖 Hệ thống <b>tự đăng 1 bài xoay vòng (15 mẫu)</b> lên Page mỗi ngày ~10h sáng. Nút xanh để đăng tay ngay.</p>
   </div>
@@ -855,6 +877,7 @@ var fbp=$('fbpost');if(fbp)fbp.onclick=function(){var img='1',rs=document.getEle
   fbp.textContent='Đang đăng...';$('fbresult').textContent='';
   fetch('/admin-fb-post',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS,message:$('fbmsg').value,img:img})}).then(function(r){return r.json()}).then(function(d){fbp.textContent='📤 Đăng bài này lên Page';$('fbresult').textContent=d.ok?('✅ Đã đăng! id '+d.id):('❌ '+(d.error||'lỗi'))}).catch(function(){fbp.textContent='📤 Đăng bài này lên Page';$('fbresult').textContent='❌ lỗi mạng'})};
 var apb=$('autopost');if(apb)apb.onclick=function(){apb.textContent='...';$('fbresult').textContent='';fetch('/admin-autopost',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS})}).then(function(r){return r.json()}).then(function(d){apb.textContent='📅 Đăng nội dung hôm nay';$('fbresult').textContent=d.ok?('✅ Đã đăng nội dung hôm nay! id '+d.id):('❌ '+(d.error||'lỗi'))}).catch(function(){apb.textContent='📅 Đăng nội dung hôm nay';$('fbresult').textContent='❌ lỗi mạng'})};
+var dpb=$('dealpost');if(dpb)dpb.onclick=function(){dpb.textContent='...';$('fbresult').textContent='';fetch('/admin-postdeal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS})}).then(function(r){return r.json()}).then(function(d){dpb.textContent='🔥 Đăng DEAL HOT lên Page';$('fbresult').textContent=d.ok?('✅ Đã đăng deal: '+(d.product||'').slice(0,30)+'... id '+d.id):('❌ '+(d.error||'lỗi'))}).catch(function(){dpb.textContent='🔥 Đăng DEAL HOT lên Page';$('fbresult').textContent='❌ lỗi mạng'})};
 <\/script>
 </body></html>`;
 
@@ -917,7 +940,7 @@ export default {
     ctx.waitUntil((async () => {
       try { await fetch((env.SUPABASE_URL || '') + '/rest/v1/submissions?select=id&limit=1', { headers: { apikey: env.SUPABASE_SERVICE_KEY, 'Authorization': 'Bearer ' + env.SUPABASE_SERVICE_KEY } }); } catch (e) {}  // keep-alive Supabase (chong auto-pause)
       try { await syncAccessTrade(env); } catch (e) {}  // auto-sync trang thai don tu AccessTrade
-      if (event && event.cron === '0 3 * * *') { try { await autoPostToday(env); } catch (e) {} }  // dang noi dung xoay vong len Page moi ngay 10h VN
+      if (event && (event.cron === '0 5 * * *' || event.cron === '0 12 * * *')) { try { await postHotDeal(env); } catch (e) {} }  // dang DEAL HOT len Page 2 lan/ngay (12h & 19h VN)
     })());
   },
 
@@ -1031,6 +1054,11 @@ export default {
       const body = await request.json().catch(() => ({}));
       if (!checkAdmin(body.pass, env)) return json({ error: 'unauthorized' }, 401);
       return json(await autoPostToday(env));
+    }
+    if (request.method === 'POST' && path === '/admin-postdeal') {
+      const body = await request.json().catch(() => ({}));
+      if (!checkAdmin(body.pass, env)) return json({ error: 'unauthorized' }, 401);
+      return json(await postHotDeal(env));
     }
 
     // PWA: manifest, service worker, icons, push subscribe

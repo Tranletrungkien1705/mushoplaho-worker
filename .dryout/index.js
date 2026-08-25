@@ -231,6 +231,37 @@ async function autoPostToday(env) {
   }
 }
 __name(autoPostToday, "autoPostToday");
+async function postHotDeal(env) {
+  if (!env.FB_PAGE_POST_TOKEN) return { ok: false, error: "no token" };
+  try {
+    const r = await fetch("https://api.accesstrade.vn/v1/datafeeds?merchant=shopee&limit=50", { headers: { "Authorization": "Token " + (env.ACCESSTRADE_TOKEN || "") } });
+    const j = await r.json().catch(() => ({}));
+    let items = (j && j.data || []).filter((p2) => p2 && p2.image && p2.aff_link && p2.name);
+    items.sort((a, b) => (b.discount_rate || 0) - (a.discount_rate || 0));
+    if (!items.length) return { ok: false, error: "no deals" };
+    const idx = Math.floor(Date.now() / 36e5) % Math.min(items.length, 25);
+    const p = items[idx];
+    const price = (parseInt(p.price, 10) || 0).toLocaleString("vi-VN");
+    const disc = Math.round(p.discount_rate || 0);
+    const caption = `\u{1F525} DEAL HOT H\xD4M NAY \u{1F525}
+${p.name}
+\u{1F4B0} Gi\xE1: ${price}\u0111${disc > 0 ? ` \u2014 GI\u1EA2M ${disc}%` : ""}${p.shop_name ? `
+\u{1F3EA} ${p.shop_name}` : ""}
+
+\u{1F4B8} Mua qua Mushoplaho \u0111\u1EC3 \u0111\u01B0\u1EE3c HO\xC0N 50% hoa h\u1ED3ng!
+\u{1F449} D\xE1n link v\xE0o: mushoplaho.kientlt59.workers.dev
+Ho\u1EB7c mua ngay: ${p.aff_link}
+
+#dealhot #shopee #hoantien #sansale`;
+    const form = new URLSearchParams({ url: p.image, caption, access_token: env.FB_PAGE_POST_TOKEN });
+    const fr = await fetch("https://graph.facebook.com/v19.0/1240334605834446/photos", { method: "POST", body: form });
+    const fj = await fr.json().catch(() => ({}));
+    return fj.id ? { ok: true, id: fj.id, product: p.name } : { ok: false, error: fj.error && fj.error.message || "err" };
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+}
+__name(postHotDeal, "postHotDeal");
 async function dealsResponse(env, ctx) {
   const cache = caches.default;
   const cacheKey = new Request("https://mushoplaho-cache/deals-v1");
@@ -922,6 +953,7 @@ var ADMIN_HTML = `<!doctype html>
     </div>
     <button class="sm" id="fbpost" style="margin-top:8px">\u{1F4E4} \u0110\u0103ng b\xE0i n\xE0y l\xEAn Page</button>
     <button class="sm" id="autopost" style="margin-top:8px;background:#039855">\u{1F4C5} \u0110\u0103ng n\u1ED9i dung h\xF4m nay</button>
+    <button class="sm" id="dealpost" style="margin-top:8px;background:#FF4E73">\u{1F525} \u0110\u0103ng DEAL HOT l\xEAn Page</button>
     <span class="mut" id="fbresult" style="margin-left:10px"></span>
     <p class="mut" style="margin-top:6px">\u{1F916} H\u1EC7 th\u1ED1ng <b>t\u1EF1 \u0111\u0103ng 1 b\xE0i xoay v\xF2ng (15 m\u1EABu)</b> l\xEAn Page m\u1ED7i ng\xE0y ~10h s\xE1ng. N\xFAt xanh \u0111\u1EC3 \u0111\u0103ng tay ngay.</p>
   </div>
@@ -981,6 +1013,7 @@ var fbp=$('fbpost');if(fbp)fbp.onclick=function(){var img='1',rs=document.getEle
   fbp.textContent='\u0110ang \u0111\u0103ng...';$('fbresult').textContent='';
   fetch('/admin-fb-post',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS,message:$('fbmsg').value,img:img})}).then(function(r){return r.json()}).then(function(d){fbp.textContent='\u{1F4E4} \u0110\u0103ng b\xE0i n\xE0y l\xEAn Page';$('fbresult').textContent=d.ok?('\u2705 \u0110\xE3 \u0111\u0103ng! id '+d.id):('\u274C '+(d.error||'l\u1ED7i'))}).catch(function(){fbp.textContent='\u{1F4E4} \u0110\u0103ng b\xE0i n\xE0y l\xEAn Page';$('fbresult').textContent='\u274C l\u1ED7i m\u1EA1ng'})};
 var apb=$('autopost');if(apb)apb.onclick=function(){apb.textContent='...';$('fbresult').textContent='';fetch('/admin-autopost',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS})}).then(function(r){return r.json()}).then(function(d){apb.textContent='\u{1F4C5} \u0110\u0103ng n\u1ED9i dung h\xF4m nay';$('fbresult').textContent=d.ok?('\u2705 \u0110\xE3 \u0111\u0103ng n\u1ED9i dung h\xF4m nay! id '+d.id):('\u274C '+(d.error||'l\u1ED7i'))}).catch(function(){apb.textContent='\u{1F4C5} \u0110\u0103ng n\u1ED9i dung h\xF4m nay';$('fbresult').textContent='\u274C l\u1ED7i m\u1EA1ng'})};
+var dpb=$('dealpost');if(dpb)dpb.onclick=function(){dpb.textContent='...';$('fbresult').textContent='';fetch('/admin-postdeal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS})}).then(function(r){return r.json()}).then(function(d){dpb.textContent='\u{1F525} \u0110\u0103ng DEAL HOT l\xEAn Page';$('fbresult').textContent=d.ok?('\u2705 \u0110\xE3 \u0111\u0103ng deal: '+(d.product||'').slice(0,30)+'... id '+d.id):('\u274C '+(d.error||'l\u1ED7i'))}).catch(function(){dpb.textContent='\u{1F525} \u0110\u0103ng DEAL HOT l\xEAn Page';$('fbresult').textContent='\u274C l\u1ED7i m\u1EA1ng'})};
 <\/script>
 </body></html>`;
 function html(body) {
@@ -1066,9 +1099,9 @@ var index_default = {
         await syncAccessTrade(env);
       } catch (e) {
       }
-      if (event && event.cron === "0 3 * * *") {
+      if (event && (event.cron === "0 5 * * *" || event.cron === "0 12 * * *")) {
         try {
-          await autoPostToday(env);
+          await postHotDeal(env);
         } catch (e) {
         }
       }
@@ -1184,6 +1217,11 @@ var index_default = {
       const body = await request.json().catch(() => ({}));
       if (!checkAdmin(body.pass, env)) return json({ error: "unauthorized" }, 401);
       return json(await autoPostToday(env));
+    }
+    if (request.method === "POST" && path === "/admin-postdeal") {
+      const body = await request.json().catch(() => ({}));
+      if (!checkAdmin(body.pass, env)) return json({ error: "unauthorized" }, 401);
+      return json(await postHotDeal(env));
     }
     if (request.method === "GET" && path === "/manifest.json") return new Response(MANIFEST, { headers: { "Content-Type": "application/manifest+json", "Cache-Control": "public, max-age=3600" } });
     if (request.method === "GET" && path === "/sw.js") return new Response(SW_JS, { headers: { "Content-Type": "application/javascript", "Cache-Control": "no-cache", "Service-Worker-Allowed": "/" } });
