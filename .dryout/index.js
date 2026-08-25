@@ -165,6 +165,72 @@ async function makeAffiliate(url, env, utmContent) {
   return { platform, aff };
 }
 __name(makeAffiliate, "makeAffiliate");
+var SITE_URL = "mushoplaho.kientlt59.workers.dev";
+var CONTENT_BANK = [
+  `\u{1F525} M\u1EB8O MUA SHOPEE \u0110\u01AF\u1EE2C HO\xC0N L\u1EA0I TI\u1EC0N
+
+Mua \u0111\u1ED3 nh\u01B0 b\xECnh th\u01B0\u1EDDng, qua 1 b\u01B0\u1EDBc nh\u1ECF l\xE0 \u0111\u01B0\u1EE3c ho\xE0n t\u1EDBi 50% hoa h\u1ED3ng c\u1EE7a \u0111\u01A1n v\u1EC1 t\xE0i kho\u1EA3n \u{1F4B8}
+\u{1F449} D\xE1n link s\u1EA3n ph\u1EA9m v\xE0o: ${SITE_URL}
+Mi\u1EC5n ph\xED, kh\xF4ng c\u1EA7n c\xE0i app. Ai hay mua Shopee l\u01B0u l\u1EA1i nh\xE9!`,
+  `B\u1EA1n c\xF3 bi\u1EBFt: m\u1ED7i \u0111\u01A1n Shopee b\u1EA1n mua \u0111\u1EC1u c\xF3 m\u1ED9t kho\u1EA3n hoa h\u1ED3ng \u2014 v\xE0 b\u1EA1n c\xF3 th\u1EC3 l\u1EA5y l\u1EA1i 50% kho\u1EA3n \u0111\xF3 v\u1EC1 t\xFAi m\xECnh \u{1F62E}
+C\xE1ch l\xE0m 5 gi\xE2y \u{1F449} ${SITE_URL}`,
+  `\u{1F4AC} "Mua Shopee m\xE0 \u0111\u01B0\u1EE3c ho\xE0n ti\u1EC1n th\u1EADt h\u1EA3?" \u2014 Th\u1EADt nha!
+D\xE1n link s\u1EA3n ph\u1EA9m \u2192 nh\u1EADn link ho\xE0n ti\u1EC1n \u2192 mua nh\u01B0 th\u01B0\u1EDDng \u2192 ti\u1EC1n ho\xE0n v\u1EC1 STK.
+Th\u1EED \u0111i: ${SITE_URL}`,
+  `\u{1F6D2} S\u1EAFp t\u1EDBi sale l\u1EDBn Shopee r\u1ED3i!
+Tr\u01B0\u1EDBc khi b\u1EA5m mua, gh\xE9 \u0111\xE2y l\u1EA5y link ho\xE0n ti\u1EC1n \u0111\u1EC3 \u0111\u01B0\u1EE3c ho\xE0n th\xEAm 50% hoa h\u1ED3ng nh\xE9 \u{1F449} ${SITE_URL}
+Mi\u1EC5n ph\xED, mua bao nhi\xEAu ho\xE0n b\u1EA5y nhi\xEAu \u{1F4B8}`,
+  `So s\xE1nh nhanh:
+\u274C Mua Shopee b\xECnh th\u01B0\u1EDDng \u2192 m\u1EA5t tr\u1EAFng kho\u1EA3n hoa h\u1ED3ng
+\u2705 Mua qua ${SITE_URL} \u2192 ho\xE0n l\u1EA1i 50% v\u1EC1 t\xE0i kho\u1EA3n
+C\xF9ng 1 s\u1EA3n ph\u1EA9m, c\xF9ng 1 gi\xE1 \u2014 ch\u1EC9 kh\xE1c 1 b\u01B0\u1EDBc \u{1F609}`,
+  `\u{1F4CB} 3 b\u01B0\u1EDBc nh\u1EADn ti\u1EC1n ho\xE0n:
+1\uFE0F\u20E3 Copy link s\u1EA3n ph\u1EA9m Shopee
+2\uFE0F\u20E3 D\xE1n v\xE0o ${SITE_URL}
+3\uFE0F\u20E3 B\u1EA5m "M\u1EDF Shopee & mua"
+\u2192 Ti\u1EC1n ho\xE0n v\u1EC1 STK theo l\u1ECBch. \u0110\u01A1n gi\u1EA3n v\u1EADy th\xF4i!`,
+  `Th\xE1ng n\xE0y mua s\u1EAFm nhi\u1EC1u \u0111\xFAng kh\xF4ng \u{1F648}
+\u0110\u1EEBng \u0111\u1EC3 ph\xED \u2014 m\u1ED7i \u0111\u01A1n Shopee l\u1EA5y l\u1EA1i \u0111\u01B0\u1EE3c 50% hoa h\u1ED3ng \u0111\xF3.
+Gh\xE9 ${SITE_URL} d\xE1n link l\xE0 xong \u{1F4B8}`,
+  `\u{1F381} Mi\u1EC5n ph\xED 100% \u2014 kh\xF4ng c\xE0i app, kh\xF4ng \u0111\u0103ng nh\u1EADp, kh\xF4ng l\u1EB1ng nh\u1EB1ng.
+D\xE1n link Shopee \u2192 nh\u1EADn link ho\xE0n ti\u1EC1n \u2192 mua \u2192 nh\u1EADn l\u1EA1i ti\u1EC1n.
+${SITE_URL}`,
+  `Ai hay mua \u0111\u1ED3 skincare / th\u1EDDi trang / \u0111\u1ED3 gia d\u1EE5ng tr\xEAn Shopee \u0111i\u1EC3m danh \u{1F64B}
+Mua qua ${SITE_URL} \u0111\u1EC3 \u0111\u01B0\u1EE3c ho\xE0n l\u1EA1i 50% hoa h\u1ED3ng m\u1ED7i \u0111\u01A1n nh\xE9, ti\u1EBFc g\xEC m\xE0 kh\xF4ng th\u1EED \u{1F4B8}`,
+  `Ng\u01B0\u1EDDi ta mua Shopee xong l\xE0 h\u1EBFt chuy\u1EC7n.
+B\u1EA1n mua Shopee xong c\xF2n \u0111\u01B0\u1EE3c... ho\xE0n l\u1EA1i ti\u1EC1n \u{1F60E}
+B\xED quy\u1EBFt: ${SITE_URL}`,
+  `\u2753 H\u1ECFi: C\xF3 m\u1EA5t ph\xED g\xEC kh\xF4ng?
+\u2705 \u0110\xE1p: KH\xD4NG. Ho\xE0n to\xE0n mi\u1EC5n ph\xED. B\u1EA1n ch\u1EC9 mua nh\u01B0 b\xECnh th\u01B0\u1EDDng v\xE0 nh\u1EADn l\u1EA1i % ti\u1EC1n.
+L\xE0m th\u1EED: ${SITE_URL}`,
+  `L\u01B0\u01A1ng v\u1EC1 l\xE0 mu\u1ED1n "qu\u1EA9y" Shopee ngay \u{1F4B3}
+Mua th\xF4ng minh h\u01A1n: qua ${SITE_URL} \u0111\u1EC3 ho\xE0n l\u1EA1i 50% hoa h\u1ED3ng m\u1ED7i \u0111\u01A1n. Mua s\u01B0\u1EDBng tay m\xE0 v\u1EABn ti\u1EBFt ki\u1EC7m \u{1F4B8}`,
+  `\u{1F50E} \u0110\xE3 mua qua link ho\xE0n ti\u1EC1n? Nh\u1EDB l\u01B0u M\xC3 \u0110\u01A0N \u0111\u1EC3 tra c\u1EE9u ti\u1EC1n ho\xE0n b\u1EA5t c\u1EE9 l\xFAc n\xE0o nh\xE9!
+Ch\u01B0a th\u1EED? B\u1EAFt \u0111\u1EA7u t\u1EA1i ${SITE_URL}`,
+  `R\u1EE7 h\u1ED9i ch\u1ECB em c\xF9ng "s\u0103n sale + ho\xE0n ti\u1EC1n" cho vui \u{1F46F}
+Ai c\u0169ng mua Shopee, sao kh\xF4ng c\xF9ng l\u1EA5y l\u1EA1i ti\u1EC1n?
+${SITE_URL}`,
+  `\u{1F4B8} Mua L\xE0 Ho\xE0n \u2014 d\xE1n link Shopee, nh\u1EADn l\u1EA1i \u0111\u1EBFn 50% hoa h\u1ED3ng.
+Mi\u1EC5n ph\xED \u2022 Kh\xF4ng c\xE0i app \u2022 Tra c\u1EE9u minh b\u1EA1ch.
+B\u1EAFt \u0111\u1EA7u ngay: ${SITE_URL}`
+];
+async function autoPostToday(env) {
+  const token = env.FB_PAGE_POST_TOKEN;
+  if (!token) return { ok: false, error: "no token" };
+  const day = Math.floor(Date.now() / 864e5);
+  const msg = CONTENT_BANK[day % CONTENT_BANK.length];
+  const imgs = ["/og.png", "/og2.png", "/og3.png"];
+  const imgUrl = "https://" + SITE_URL + imgs[day % 3];
+  try {
+    const form = new URLSearchParams({ url: imgUrl, caption: msg, access_token: token });
+    const r = await fetch("https://graph.facebook.com/v19.0/1240334605834446/photos", { method: "POST", body: form });
+    const j = await r.json().catch(() => ({}));
+    return j.id ? { ok: true, id: j.id } : { ok: false, error: j.error && j.error.message || "err" };
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+}
+__name(autoPostToday, "autoPostToday");
 async function dealsResponse(env, ctx) {
   const cache = caches.default;
   const cacheKey = new Request("https://mushoplaho-cache/deals-v1");
@@ -854,8 +920,10 @@ var ADMIN_HTML = `<!doctype html>
       <label><input type="radio" name="fbimg" value="3"> M\u1EABu 3</label>
       <a href="/og.png" target="_blank" style="font-size:12px">1</a><a href="/og2.png" target="_blank" style="font-size:12px">2</a><a href="/og3.png" target="_blank" style="font-size:12px">3</a>
     </div>
-    <button class="sm" id="fbpost" style="margin-top:8px">\u{1F4E4} \u0110\u0103ng l\xEAn Page</button>
+    <button class="sm" id="fbpost" style="margin-top:8px">\u{1F4E4} \u0110\u0103ng b\xE0i n\xE0y l\xEAn Page</button>
+    <button class="sm" id="autopost" style="margin-top:8px;background:#039855">\u{1F4C5} \u0110\u0103ng n\u1ED9i dung h\xF4m nay</button>
     <span class="mut" id="fbresult" style="margin-left:10px"></span>
+    <p class="mut" style="margin-top:6px">\u{1F916} H\u1EC7 th\u1ED1ng <b>t\u1EF1 \u0111\u0103ng 1 b\xE0i xoay v\xF2ng (15 m\u1EABu)</b> l\xEAn Page m\u1ED7i ng\xE0y ~10h s\xE1ng. N\xFAt xanh \u0111\u1EC3 \u0111\u0103ng tay ngay.</p>
   </div>
 </div>
 <script>
@@ -911,7 +979,8 @@ var FBSAMPLE='\u{1F525} M\u1EB8O MUA SHOPEE \u0110\u01AF\u1EE2C HO\xC0N L\u1EA0I
 if($('fbmsg')&&!$('fbmsg').value)$('fbmsg').value=FBSAMPLE;
 var fbp=$('fbpost');if(fbp)fbp.onclick=function(){var img='1',rs=document.getElementsByName('fbimg');for(var i=0;i<rs.length;i++)if(rs[i].checked)img=rs[i].value;
   fbp.textContent='\u0110ang \u0111\u0103ng...';$('fbresult').textContent='';
-  fetch('/admin-fb-post',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS,message:$('fbmsg').value,img:img})}).then(function(r){return r.json()}).then(function(d){fbp.textContent='\u{1F4E4} \u0110\u0103ng l\xEAn Page';$('fbresult').textContent=d.ok?('\u2705 \u0110\xE3 \u0111\u0103ng! id '+d.id):('\u274C '+(d.error||'l\u1ED7i'))}).catch(function(){fbp.textContent='\u{1F4E4} \u0110\u0103ng l\xEAn Page';$('fbresult').textContent='\u274C l\u1ED7i m\u1EA1ng'})};
+  fetch('/admin-fb-post',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS,message:$('fbmsg').value,img:img})}).then(function(r){return r.json()}).then(function(d){fbp.textContent='\u{1F4E4} \u0110\u0103ng b\xE0i n\xE0y l\xEAn Page';$('fbresult').textContent=d.ok?('\u2705 \u0110\xE3 \u0111\u0103ng! id '+d.id):('\u274C '+(d.error||'l\u1ED7i'))}).catch(function(){fbp.textContent='\u{1F4E4} \u0110\u0103ng b\xE0i n\xE0y l\xEAn Page';$('fbresult').textContent='\u274C l\u1ED7i m\u1EA1ng'})};
+var apb=$('autopost');if(apb)apb.onclick=function(){apb.textContent='...';$('fbresult').textContent='';fetch('/admin-autopost',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS})}).then(function(r){return r.json()}).then(function(d){apb.textContent='\u{1F4C5} \u0110\u0103ng n\u1ED9i dung h\xF4m nay';$('fbresult').textContent=d.ok?('\u2705 \u0110\xE3 \u0111\u0103ng n\u1ED9i dung h\xF4m nay! id '+d.id):('\u274C '+(d.error||'l\u1ED7i'))}).catch(function(){apb.textContent='\u{1F4C5} \u0110\u0103ng n\u1ED9i dung h\xF4m nay';$('fbresult').textContent='\u274C l\u1ED7i m\u1EA1ng'})};
 <\/script>
 </body></html>`;
 function html(body) {
@@ -996,6 +1065,12 @@ var index_default = {
       try {
         await syncAccessTrade(env);
       } catch (e) {
+      }
+      if (event && event.cron === "0 3 * * *") {
+        try {
+          await autoPostToday(env);
+        } catch (e) {
+        }
       }
     })());
   },
@@ -1104,6 +1179,11 @@ var index_default = {
       } catch (e) {
         return json({ ok: false, error: String(e) }, 500);
       }
+    }
+    if (request.method === "POST" && path === "/admin-autopost") {
+      const body = await request.json().catch(() => ({}));
+      if (!checkAdmin(body.pass, env)) return json({ error: "unauthorized" }, 401);
+      return json(await autoPostToday(env));
     }
     if (request.method === "GET" && path === "/manifest.json") return new Response(MANIFEST, { headers: { "Content-Type": "application/manifest+json", "Cache-Control": "public, max-age=3600" } });
     if (request.method === "GET" && path === "/sw.js") return new Response(SW_JS, { headers: { "Content-Type": "application/javascript", "Cache-Control": "no-cache", "Service-Worker-Allowed": "/" } });

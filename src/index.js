@@ -85,6 +85,41 @@ async function makeAffiliate(url, env, utmContent) {
   return { platform, aff };
 }
 
+// 15 ban noi dung xoay vong (dang Page moi ngay, khac goc do)
+const SITE_URL = 'mushoplaho.kientlt59.workers.dev';
+const CONTENT_BANK = [
+  `🔥 MẸO MUA SHOPEE ĐƯỢC HOÀN LẠI TIỀN\n\nMua đồ như bình thường, qua 1 bước nhỏ là được hoàn tới 50% hoa hồng của đơn về tài khoản 💸\n👉 Dán link sản phẩm vào: ${SITE_URL}\nMiễn phí, không cần cài app. Ai hay mua Shopee lưu lại nhé!`,
+  `Bạn có biết: mỗi đơn Shopee bạn mua đều có một khoản hoa hồng — và bạn có thể lấy lại 50% khoản đó về túi mình 😮\nCách làm 5 giây 👉 ${SITE_URL}`,
+  `💬 "Mua Shopee mà được hoàn tiền thật hả?" — Thật nha!\nDán link sản phẩm → nhận link hoàn tiền → mua như thường → tiền hoàn về STK.\nThử đi: ${SITE_URL}`,
+  `🛒 Sắp tới sale lớn Shopee rồi!\nTrước khi bấm mua, ghé đây lấy link hoàn tiền để được hoàn thêm 50% hoa hồng nhé 👉 ${SITE_URL}\nMiễn phí, mua bao nhiêu hoàn bấy nhiêu 💸`,
+  `So sánh nhanh:\n❌ Mua Shopee bình thường → mất trắng khoản hoa hồng\n✅ Mua qua ${SITE_URL} → hoàn lại 50% về tài khoản\nCùng 1 sản phẩm, cùng 1 giá — chỉ khác 1 bước 😉`,
+  `📋 3 bước nhận tiền hoàn:\n1️⃣ Copy link sản phẩm Shopee\n2️⃣ Dán vào ${SITE_URL}\n3️⃣ Bấm "Mở Shopee & mua"\n→ Tiền hoàn về STK theo lịch. Đơn giản vậy thôi!`,
+  `Tháng này mua sắm nhiều đúng không 🙈\nĐừng để phí — mỗi đơn Shopee lấy lại được 50% hoa hồng đó.\nGhé ${SITE_URL} dán link là xong 💸`,
+  `🎁 Miễn phí 100% — không cài app, không đăng nhập, không lằng nhằng.\nDán link Shopee → nhận link hoàn tiền → mua → nhận lại tiền.\n${SITE_URL}`,
+  `Ai hay mua đồ skincare / thời trang / đồ gia dụng trên Shopee điểm danh 🙋\nMua qua ${SITE_URL} để được hoàn lại 50% hoa hồng mỗi đơn nhé, tiếc gì mà không thử 💸`,
+  `Người ta mua Shopee xong là hết chuyện.\nBạn mua Shopee xong còn được... hoàn lại tiền 😎\nBí quyết: ${SITE_URL}`,
+  `❓ Hỏi: Có mất phí gì không?\n✅ Đáp: KHÔNG. Hoàn toàn miễn phí. Bạn chỉ mua như bình thường và nhận lại % tiền.\nLàm thử: ${SITE_URL}`,
+  `Lương về là muốn "quẩy" Shopee ngay 💳\nMua thông minh hơn: qua ${SITE_URL} để hoàn lại 50% hoa hồng mỗi đơn. Mua sướng tay mà vẫn tiết kiệm 💸`,
+  `🔎 Đã mua qua link hoàn tiền? Nhớ lưu MÃ ĐƠN để tra cứu tiền hoàn bất cứ lúc nào nhé!\nChưa thử? Bắt đầu tại ${SITE_URL}`,
+  `Rủ hội chị em cùng "săn sale + hoàn tiền" cho vui 👯\nAi cũng mua Shopee, sao không cùng lấy lại tiền?\n${SITE_URL}`,
+  `💸 Mua Là Hoàn — dán link Shopee, nhận lại đến 50% hoa hồng.\nMiễn phí • Không cài app • Tra cứu minh bạch.\nBắt đầu ngay: ${SITE_URL}`
+];
+
+async function autoPostToday(env) {
+  const token = env.FB_PAGE_POST_TOKEN;
+  if (!token) return { ok: false, error: 'no token' };
+  const day = Math.floor(Date.now() / 86400000);
+  const msg = CONTENT_BANK[day % CONTENT_BANK.length];
+  const imgs = ['/og.png', '/og2.png', '/og3.png'];
+  const imgUrl = 'https://' + SITE_URL + imgs[day % 3];
+  try {
+    const form = new URLSearchParams({ url: imgUrl, caption: msg, access_token: token });
+    const r = await fetch('https://graph.facebook.com/v19.0/1240334605834446/photos', { method: 'POST', body: form });
+    const j = await r.json().catch(() => ({}));
+    return j.id ? { ok: true, id: j.id } : { ok: false, error: (j.error && j.error.message) || 'err' };
+  } catch (e) { return { ok: false, error: String(e) }; }
+}
+
 // Deal hot: tu dong keo tu AccessTrade datafeeds (Shopee) + cache 30'
 async function dealsResponse(env, ctx) {
   const cache = caches.default;
@@ -759,8 +794,10 @@ const ADMIN_HTML = `<!doctype html>
       <label><input type="radio" name="fbimg" value="3"> Mẫu 3</label>
       <a href="/og.png" target="_blank" style="font-size:12px">1</a><a href="/og2.png" target="_blank" style="font-size:12px">2</a><a href="/og3.png" target="_blank" style="font-size:12px">3</a>
     </div>
-    <button class="sm" id="fbpost" style="margin-top:8px">📤 Đăng lên Page</button>
+    <button class="sm" id="fbpost" style="margin-top:8px">📤 Đăng bài này lên Page</button>
+    <button class="sm" id="autopost" style="margin-top:8px;background:#039855">📅 Đăng nội dung hôm nay</button>
     <span class="mut" id="fbresult" style="margin-left:10px"></span>
+    <p class="mut" style="margin-top:6px">🤖 Hệ thống <b>tự đăng 1 bài xoay vòng (15 mẫu)</b> lên Page mỗi ngày ~10h sáng. Nút xanh để đăng tay ngay.</p>
   </div>
 </div>
 <script>
@@ -816,7 +853,8 @@ var FBSAMPLE='🔥 MẸO MUA SHOPEE ĐƯỢC HOÀN LẠI TIỀN\\n\\nMua đồ S
 if($('fbmsg')&&!$('fbmsg').value)$('fbmsg').value=FBSAMPLE;
 var fbp=$('fbpost');if(fbp)fbp.onclick=function(){var img='1',rs=document.getElementsByName('fbimg');for(var i=0;i<rs.length;i++)if(rs[i].checked)img=rs[i].value;
   fbp.textContent='Đang đăng...';$('fbresult').textContent='';
-  fetch('/admin-fb-post',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS,message:$('fbmsg').value,img:img})}).then(function(r){return r.json()}).then(function(d){fbp.textContent='📤 Đăng lên Page';$('fbresult').textContent=d.ok?('✅ Đã đăng! id '+d.id):('❌ '+(d.error||'lỗi'))}).catch(function(){fbp.textContent='📤 Đăng lên Page';$('fbresult').textContent='❌ lỗi mạng'})};
+  fetch('/admin-fb-post',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS,message:$('fbmsg').value,img:img})}).then(function(r){return r.json()}).then(function(d){fbp.textContent='📤 Đăng bài này lên Page';$('fbresult').textContent=d.ok?('✅ Đã đăng! id '+d.id):('❌ '+(d.error||'lỗi'))}).catch(function(){fbp.textContent='📤 Đăng bài này lên Page';$('fbresult').textContent='❌ lỗi mạng'})};
+var apb=$('autopost');if(apb)apb.onclick=function(){apb.textContent='...';$('fbresult').textContent='';fetch('/admin-autopost',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS})}).then(function(r){return r.json()}).then(function(d){apb.textContent='📅 Đăng nội dung hôm nay';$('fbresult').textContent=d.ok?('✅ Đã đăng nội dung hôm nay! id '+d.id):('❌ '+(d.error||'lỗi'))}).catch(function(){apb.textContent='📅 Đăng nội dung hôm nay';$('fbresult').textContent='❌ lỗi mạng'})};
 <\/script>
 </body></html>`;
 
@@ -879,6 +917,7 @@ export default {
     ctx.waitUntil((async () => {
       try { await fetch((env.SUPABASE_URL || '') + '/rest/v1/submissions?select=id&limit=1', { headers: { apikey: env.SUPABASE_SERVICE_KEY, 'Authorization': 'Bearer ' + env.SUPABASE_SERVICE_KEY } }); } catch (e) {}  // keep-alive Supabase (chong auto-pause)
       try { await syncAccessTrade(env); } catch (e) {}  // auto-sync trang thai don tu AccessTrade
+      if (event && event.cron === '0 3 * * *') { try { await autoPostToday(env); } catch (e) {} }  // dang noi dung xoay vong len Page moi ngay 10h VN
     })());
   },
 
@@ -987,6 +1026,11 @@ export default {
         if (j && j.id) return json({ ok: true, id: j.id });
         return json({ ok: false, error: (j.error && j.error.message) || 'Lỗi đăng' }, 400);
       } catch (e) { return json({ ok: false, error: String(e) }, 500); }
+    }
+    if (request.method === 'POST' && path === '/admin-autopost') {
+      const body = await request.json().catch(() => ({}));
+      if (!checkAdmin(body.pass, env)) return json({ error: 'unauthorized' }, 401);
+      return json(await autoPostToday(env));
     }
 
     // PWA: manifest, service worker, icons, push subscribe
