@@ -2,3 +2,7 @@ name = "mushoplaho"
 main = "src/index.js"
 compatibility_date = "2026-08-01"
 # Không cần binding gì thêm — tất cả secret set bằng: wrangler secret put <NAME>
+
+# Cron: keep-alive Supabase (chống auto-pause) + auto-sync trạng thái đơn từ AccessTrade
+[triggers]
+crons = ["0 */6 * * *"]

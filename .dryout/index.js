@@ -137,7 +137,7 @@ function genOrderCode() {
   return "MLH-" + a + b;
 }
 __name(genOrderCode, "genOrderCode");
-async function makeAffiliate(url, env) {
+async function makeAffiliate(url, env, utmContent) {
   const platform = detectPlatform(url);
   const TOKEN = env.ACCESSTRADE_TOKEN || "";
   const CAMP = { shopee: env.AT_CAMPAIGN_SHOPEE || "", tiktok: env.AT_CAMPAIGN_TIKTOK || "", lazada: env.AT_CAMPAIGN_LAZADA || "" };
@@ -145,10 +145,12 @@ async function makeAffiliate(url, env) {
   let aff = url;
   if (TOKEN && cid && /^https?:/.test(url)) {
     try {
+      const payload = { campaign_id: cid, urls: [url] };
+      if (utmContent) payload.utm_content = utmContent;
       const r = await fetch("https://api.accesstrade.vn/v1/product_link/create", {
         method: "POST",
         headers: { "Authorization": "Token " + TOKEN, "Content-Type": "application/json" },
-        body: JSON.stringify({ campaign_id: cid, urls: [url] })
+        body: JSON.stringify(payload)
       });
       const j = await r.json().catch(() => ({}));
       const d = j && j.data;
@@ -250,6 +252,43 @@ function checkAdmin(pass, env) {
   return !!(pass && env.ADMIN_TOKEN && pass === env.ADMIN_TOKEN);
 }
 __name(checkAdmin, "checkAdmin");
+async function syncSetStatus(orderCode, status, env) {
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY || !orderCode) return false;
+  try {
+    const r = await fetch(env.SUPABASE_URL + `/rest/v1/submissions?order_code=eq.${encodeURIComponent(orderCode)}&status=neq.paid`, {
+      method: "PATCH",
+      headers: { apikey: env.SUPABASE_SERVICE_KEY, "Authorization": "Bearer " + env.SUPABASE_SERVICE_KEY, "Content-Type": "application/json", "Prefer": "return=minimal" },
+      body: JSON.stringify({ status })
+    });
+    return r.ok;
+  } catch (e) {
+    return false;
+  }
+}
+__name(syncSetStatus, "syncSetStatus");
+async function syncAccessTrade(env) {
+  const TOKEN = env.ACCESSTRADE_TOKEN;
+  if (!TOKEN) return { updated: 0, seen: 0 };
+  const until = /* @__PURE__ */ new Date();
+  const since = new Date(until.getTime() - 100 * 24 * 3600 * 1e3);
+  const iso = /* @__PURE__ */ __name((d) => d.toISOString().slice(0, 19) + "Z", "iso");
+  let updated = 0, seen = 0;
+  try {
+    const r = await fetch(`https://api.accesstrade.vn/v1/transactions?since=${iso(since)}&until=${iso(until)}&limit=1000`, { headers: { "Authorization": "Token " + TOKEN } });
+    const j = await r.json().catch(() => ({}));
+    const data = j && j.data || [];
+    for (const t of data) {
+      const code = t.utm_content;
+      if (!code || !/^MLH-/i.test(code)) continue;
+      seen++;
+      const st = t.status === 2 ? "cancelled" : t.status === 1 ? "confirmed" : "purchased";
+      if (await syncSetStatus(code, st, env)) updated++;
+    }
+  } catch (e) {
+  }
+  return { updated, seen };
+}
+__name(syncAccessTrade, "syncAccessTrade");
 async function chatInsert(row, env) {
   if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY) return;
   try {
@@ -337,9 +376,9 @@ async function buildReply(msg, env) {
   const urlMatch = text.match(/https?:\/\/[^\s]+/);
   if (urlMatch) {
     const url = urlMatch[0];
-    const [, mk] = await Promise.all([sendTyping(psid, env), makeAffiliate(url, env)]);
-    const { platform, aff } = mk;
     const code = genOrderCode();
+    const [, mk] = await Promise.all([sendTyping(psid, env), makeAffiliate(url, env, code)]);
+    const { platform, aff } = mk;
     await supabaseInsert({ buyer_psid: psid, buyer_text: text, original_url: url, platform, affiliate_url: aff, order_code: code, status: "notified" }, env);
     return { psid, reply: `\u{1F381} Link Mua-L\xE0-Ho\xE0n c\u1EE7a b\u1EA1n:
 ${aff}
@@ -735,8 +774,9 @@ var ADMIN_HTML = `<!doctype html>
   <div class="card" id="panel" style="display:none">
     <div class="bar" style="justify-content:space-between">
       <div><b id="cnt">0</b> \u0111\u01A1n \xB7 <span class="mut">m\u1EDBi nh\u1EA5t tr\u01B0\u1EDBc</span></div>
-      <div class="bar"><input id="filter" placeholder="L\u1ECDc m\xE3/S\u0110T/s\xE0n" style="width:200px"><button class="sm" id="reload">T\u1EA3i l\u1EA1i</button></div>
+      <div class="bar"><input id="filter" placeholder="L\u1ECDc m\xE3/S\u0110T/s\xE0n" style="width:170px"><button class="sm" id="syncbtn">\u{1F504} Sync AccessTrade</button><button class="sm" id="reload">T\u1EA3i l\u1EA1i</button></div>
     </div>
+    <p class="mut" style="margin-top:6px">Tr\u1EA1ng th\xE1i <b>\u0110\xE3 mua/\u0110\u1ED1i so\xE1t/Hu\u1EF7</b> t\u1EF1 \u0111\u1ED3ng b\u1ED9 t\u1EEB AccessTrade (6h/l\u1EA7n ho\u1EB7c b\u1EA5m Sync). B\u1EA1n ch\u1EC9 c\u1EA7n ch\u1ECDn <b>"\u0110\xE3 ho\xE0n"</b> khi \u0111\xE3 chuy\u1EC3n ti\u1EC1n cho kh\xE1ch.</p>
     <div class="ov"><table id="tbl"><thead><tr>
       <th>M\xE3 \u0111\u01A1n</th><th>Li\xEAn h\u1EC7</th><th>STK ng\xE2n h\xE0ng</th><th>S\xE0n</th><th>Tr\u1EA1ng th\xE1i</th><th>Ghi ch\xFA</th><th></th><th>Link</th>
     </tr></thead><tbody></tbody></table></div>
@@ -795,6 +835,7 @@ function openThread(){if(!curThread)return;fetch('/admin-chat',{method:'POST',he
   $('cmsgs').innerHTML=ms.map(function(m){return '<div style="text-align:'+(m.sender==='admin'?'right':'left')+';margin:4px 0"><span style="display:inline-block;'+(m.sender==='admin'?'background:#1f6feb;color:#fff':'background:#f1f3f7')+';padding:6px 10px;border-radius:10px;font-size:13px;max-width:85%">'+esc(m.text)+'</span></div>'}).join('');$('cmsgs').scrollTop=$('cmsgs').scrollHeight}).catch(function(){})}
 $('csend').onclick=function(){var t=($('creply').value||'').trim();if(!t||!curThread)return;$('creply').value='';fetch('/admin-chat-reply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS,thread:curThread,text:t})}).then(function(){setTimeout(openThread,300);setTimeout(loadThreads,400)})};
 $('creply').addEventListener('keydown',function(e){if(e.key==='Enter')$('csend').click()});
+var syncb=$('syncbtn');if(syncb)syncb.onclick=function(){syncb.textContent='...';fetch('/admin-sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS})}).then(function(r){return r.json()}).then(function(d){syncb.textContent='\u{1F504} Sync AccessTrade';alert('\u0110\u1ED3ng b\u1ED9 xong: c\u1EADp nh\u1EADt '+(d.updated||0)+' \u0111\u01A1n (kh\u1EDBp '+(d.seen||0)+' giao d\u1ECBch c\xF3 m\xE3).');load(false)}).catch(function(){syncb.textContent='\u{1F504} Sync AccessTrade';alert('L\u1ED7i sync')})};
 <\/script>
 </body></html>`;
 function html(body) {
@@ -876,6 +917,10 @@ var index_default = {
         await fetch((env.SUPABASE_URL || "") + "/rest/v1/submissions?select=id&limit=1", { headers: { apikey: env.SUPABASE_SERVICE_KEY, "Authorization": "Bearer " + env.SUPABASE_SERVICE_KEY } });
       } catch (e) {
       }
+      try {
+        await syncAccessTrade(env);
+      } catch (e) {
+      }
     })());
   },
   async fetch(request, env, ctx) {
@@ -912,8 +957,8 @@ var index_default = {
       const uid = (body.uid || "").trim().slice(0, 40);
       if (!/^https?:\/\//.test(u)) return json({ error: "Link kh\xF4ng h\u1EE3p l\u1EC7" }, 400);
       const contact = contactRaw.length >= 4 ? contactRaw : uid ? "dev:" + uid : "web";
-      const { platform, aff } = await makeAffiliate(u, env);
       const code = genOrderCode();
+      const { platform, aff } = await makeAffiliate(u, env, code);
       await supabaseInsert({ buyer_psid: "web", buyer_text: "web", contact, order_code: code, original_url: u, platform, affiliate_url: aff, status: "web" }, env);
       return json({ buy_url: aff, order_code: code });
     }
@@ -940,6 +985,12 @@ var index_default = {
       const okU = await supabaseUpdate(body.order_code, body, env);
       if (okU && body.status === "paid") ctx.waitUntil(notifyPaid(body.order_code, env));
       return json({ ok: okU });
+    }
+    if (request.method === "POST" && path === "/admin-sync") {
+      const body = await request.json().catch(() => ({}));
+      if (!checkAdmin(body.pass, env)) return json({ error: "unauthorized" }, 401);
+      const res = await syncAccessTrade(env);
+      return json({ ok: true, updated: res.updated, seen: res.seen });
     }
     if (request.method === "GET" && path === "/manifest.json") return new Response(MANIFEST, { headers: { "Content-Type": "application/manifest+json", "Cache-Control": "public, max-age=3600" } });
     if (request.method === "GET" && path === "/sw.js") return new Response(SW_JS, { headers: { "Content-Type": "application/javascript", "Cache-Control": "no-cache", "Service-Worker-Allowed": "/" } });

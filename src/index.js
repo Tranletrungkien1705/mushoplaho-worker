@@ -61,7 +61,7 @@ function genOrderCode() {
   return 'MLH-' + a + b;
 }
 
-async function makeAffiliate(url, env) {
+async function makeAffiliate(url, env, utmContent) {
   const platform = detectPlatform(url);
   const TOKEN = env.ACCESSTRADE_TOKEN || '';
   const CAMP = { shopee: env.AT_CAMPAIGN_SHOPEE || '', tiktok: env.AT_CAMPAIGN_TIKTOK || '', lazada: env.AT_CAMPAIGN_LAZADA || '' };
@@ -69,10 +69,12 @@ async function makeAffiliate(url, env) {
   let aff = url;
   if (TOKEN && cid && /^https?:/.test(url)) {
     try {
+      const payload = { campaign_id: cid, urls: [url] };
+      if (utmContent) payload.utm_content = utmContent;   // nhet ma don -> khop lai o /v1/transactions
       const r = await fetch('https://api.accesstrade.vn/v1/product_link/create', {
         method: 'POST',
         headers: { 'Authorization': 'Token ' + TOKEN, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ campaign_id: cid, urls: [url] })
+        body: JSON.stringify(payload)
       });
       const j = await r.json().catch(() => ({}));
       const d = j && j.data;
@@ -166,6 +168,43 @@ async function supabaseUpdate(orderCode, patch, env) {
 
 function checkAdmin(pass, env) { return !!(pass && env.ADMIN_TOKEN && pass === env.ADMIN_TOKEN); }
 
+// Chi update status neu chua 'paid' (auto-sync khong duoc ha cap don da hoan cho khach)
+async function syncSetStatus(orderCode, status, env) {
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY || !orderCode) return false;
+  try {
+    const r = await fetch(env.SUPABASE_URL + `/rest/v1/submissions?order_code=eq.${encodeURIComponent(orderCode)}&status=neq.paid`, {
+      method: 'PATCH',
+      headers: { apikey: env.SUPABASE_SERVICE_KEY, 'Authorization': 'Bearer ' + env.SUPABASE_SERVICE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ status })
+    });
+    return r.ok;
+  } catch (e) { return false; }
+}
+
+// Dong bo status don tu AccessTrade /v1/transactions (khop utm_content = order_code)
+// status AT: 0 hold -> 'purchased', 1 approved -> 'confirmed', 2 rejected -> 'cancelled'. 'paid' (da chuyen khach) van thu cong.
+async function syncAccessTrade(env) {
+  const TOKEN = env.ACCESSTRADE_TOKEN;
+  if (!TOKEN) return { updated: 0, seen: 0 };
+  const until = new Date();
+  const since = new Date(until.getTime() - 100 * 24 * 3600 * 1000);
+  const iso = d => d.toISOString().slice(0, 19) + 'Z';
+  let updated = 0, seen = 0;
+  try {
+    const r = await fetch(`https://api.accesstrade.vn/v1/transactions?since=${iso(since)}&until=${iso(until)}&limit=1000`, { headers: { 'Authorization': 'Token ' + TOKEN } });
+    const j = await r.json().catch(() => ({}));
+    const data = (j && j.data) || [];
+    for (const t of data) {
+      const code = t.utm_content;
+      if (!code || !/^MLH-/i.test(code)) continue;
+      seen++;
+      const st = t.status === 2 ? 'cancelled' : (t.status === 1 ? 'confirmed' : 'purchased');
+      if (await syncSetStatus(code, st, env)) updated++;
+    }
+  } catch (e) { /* ignore */ }
+  return { updated, seen };
+}
+
 async function chatInsert(row, env) {
   if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY) return;
   try {
@@ -239,9 +278,9 @@ async function buildReply(msg, env) {
   const urlMatch = text.match(/https?:\/\/[^\s]+/);
   if (urlMatch) {
     const url = urlMatch[0];
-    const [, mk] = await Promise.all([sendTyping(psid, env), makeAffiliate(url, env)]);
-    const { platform, aff } = mk;
     const code = genOrderCode();
+    const [, mk] = await Promise.all([sendTyping(psid, env), makeAffiliate(url, env, code)]);
+    const { platform, aff } = mk;
     await supabaseInsert({ buyer_psid: psid, buyer_text: text, original_url: url, platform, affiliate_url: aff, order_code: code, status: 'notified' }, env);
     return { psid, reply:
 `🎁 Link Mua-Là-Hoàn của bạn:
@@ -641,8 +680,9 @@ const ADMIN_HTML = `<!doctype html>
   <div class="card" id="panel" style="display:none">
     <div class="bar" style="justify-content:space-between">
       <div><b id="cnt">0</b> đơn · <span class="mut">mới nhất trước</span></div>
-      <div class="bar"><input id="filter" placeholder="Lọc mã/SĐT/sàn" style="width:200px"><button class="sm" id="reload">Tải lại</button></div>
+      <div class="bar"><input id="filter" placeholder="Lọc mã/SĐT/sàn" style="width:170px"><button class="sm" id="syncbtn">🔄 Sync AccessTrade</button><button class="sm" id="reload">Tải lại</button></div>
     </div>
+    <p class="mut" style="margin-top:6px">Trạng thái <b>Đã mua/Đối soát/Huỷ</b> tự đồng bộ từ AccessTrade (6h/lần hoặc bấm Sync). Bạn chỉ cần chọn <b>"Đã hoàn"</b> khi đã chuyển tiền cho khách.</p>
     <div class="ov"><table id="tbl"><thead><tr>
       <th>Mã đơn</th><th>Liên hệ</th><th>STK ngân hàng</th><th>Sàn</th><th>Trạng thái</th><th>Ghi chú</th><th></th><th>Link</th>
     </tr></thead><tbody></tbody></table></div>
@@ -701,6 +741,7 @@ function openThread(){if(!curThread)return;fetch('/admin-chat',{method:'POST',he
   $('cmsgs').innerHTML=ms.map(function(m){return '<div style="text-align:'+(m.sender==='admin'?'right':'left')+';margin:4px 0"><span style="display:inline-block;'+(m.sender==='admin'?'background:#1f6feb;color:#fff':'background:#f1f3f7')+';padding:6px 10px;border-radius:10px;font-size:13px;max-width:85%">'+esc(m.text)+'</span></div>'}).join('');$('cmsgs').scrollTop=$('cmsgs').scrollHeight}).catch(function(){})}
 $('csend').onclick=function(){var t=($('creply').value||'').trim();if(!t||!curThread)return;$('creply').value='';fetch('/admin-chat-reply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS,thread:curThread,text:t})}).then(function(){setTimeout(openThread,300);setTimeout(loadThreads,400)})};
 $('creply').addEventListener('keydown',function(e){if(e.key==='Enter')$('csend').click()});
+var syncb=$('syncbtn');if(syncb)syncb.onclick=function(){syncb.textContent='...';fetch('/admin-sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS})}).then(function(r){return r.json()}).then(function(d){syncb.textContent='🔄 Sync AccessTrade';alert('Đồng bộ xong: cập nhật '+(d.updated||0)+' đơn (khớp '+(d.seen||0)+' giao dịch có mã).');load(false)}).catch(function(){syncb.textContent='🔄 Sync AccessTrade';alert('Lỗi sync')})};
 <\/script>
 </body></html>`;
 
@@ -761,7 +802,8 @@ async function notifyPaid(orderCode, env) {
 export default {
   async scheduled(event, env, ctx) {
     ctx.waitUntil((async () => {
-      try { await fetch((env.SUPABASE_URL || '') + '/rest/v1/submissions?select=id&limit=1', { headers: { apikey: env.SUPABASE_SERVICE_KEY, 'Authorization': 'Bearer ' + env.SUPABASE_SERVICE_KEY } }); } catch (e) {}
+      try { await fetch((env.SUPABASE_URL || '') + '/rest/v1/submissions?select=id&limit=1', { headers: { apikey: env.SUPABASE_SERVICE_KEY, 'Authorization': 'Bearer ' + env.SUPABASE_SERVICE_KEY } }); } catch (e) {}  // keep-alive Supabase (chong auto-pause)
+      try { await syncAccessTrade(env); } catch (e) {}  // auto-sync trang thai don tu AccessTrade
     })());
   },
 
@@ -807,8 +849,8 @@ export default {
       if (!/^https?:\/\//.test(u)) return json({ error: 'Link không hợp lệ' }, 400);
       // Lien he tuy chon: neu khong nhap thi gan theo device-id (van tra cuu duoc)
       const contact = contactRaw.length >= 4 ? contactRaw : (uid ? 'dev:' + uid : 'web');
-      const { platform, aff } = await makeAffiliate(u, env);
       const code = genOrderCode();
+      const { platform, aff } = await makeAffiliate(u, env, code);
       await supabaseInsert({ buyer_psid: 'web', buyer_text: 'web', contact, order_code: code, original_url: u, platform, affiliate_url: aff, status: 'web' }, env);
       return json({ buy_url: aff, order_code: code });
     }
@@ -837,6 +879,12 @@ export default {
       const okU = await supabaseUpdate(body.order_code, body, env);
       if (okU && body.status === 'paid') ctx.waitUntil(notifyPaid(body.order_code, env));
       return json({ ok: okU });
+    }
+    if (request.method === 'POST' && path === '/admin-sync') {
+      const body = await request.json().catch(() => ({}));
+      if (!checkAdmin(body.pass, env)) return json({ error: 'unauthorized' }, 401);
+      const res = await syncAccessTrade(env);
+      return json({ ok: true, updated: res.updated, seen: res.seen });
     }
 
     // PWA: manifest, service worker, icons, push subscribe
