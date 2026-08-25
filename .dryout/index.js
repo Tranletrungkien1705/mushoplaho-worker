@@ -289,6 +289,30 @@ async function syncAccessTrade(env) {
   return { updated, seen };
 }
 __name(syncAccessTrade, "syncAccessTrade");
+function botReply(text) {
+  const t = (text || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d");
+  if (/\bphi\b|mat tien|free|mien phi|ton tien|co tinh phi|tinh phi|co ton/.test(t)) return "D\u1EA1 ho\xE0n to\xE0n MI\u1EC4N PH\xCD \u1EA1 \u{1F970} B\u1EA1n ch\u1EC9 d\xE1n link, mua nh\u01B0 b\xECnh th\u01B0\u1EDDng v\xE0 nh\u1EADn l\u1EA1i ti\u1EC1n ho\xE0n.";
+  if (/bao lau|khi nao|may ngay|bao gio|lau khong|chung nao|luc nao|nhan tien khi/.test(t)) return FAQ.schedule;
+  if (/cach mua|lam sao mua|mua the nao|mua sao|huong dan|mua nhu the/.test(t)) return FAQ.howto;
+  if (/noi quy|dieu kien|quy dinh|luat le|nhu the nao moi duoc/.test(t)) return FAQ.rules;
+  if (/stk|so tai khoan|ngan hang|nhan tien|rut tien|nhan hoan|hoan ve|chuyen khoan|so tk/.test(t)) return "B\u1EA1n g\u1EEDi gi\xFAp shop: S\u1ED0 T\xC0I KHO\u1EA2N + NG\xC2N H\xC0NG + T\xCAN ch\u1EE7 TK (k\xE8m \u1EA3nh \u0111\u01A1n n\u1EBFu c\xF3) \u0111\u1EC3 shop chuy\u1EC3n ti\u1EC1n ho\xE0n theo l\u1ECBch (ng\xE0y 20\u201325 h\xE0ng th\xE1ng) nh\xE9 \u{1F4B8}";
+  if (/^(chao|hi|hello|hey|alo|shop oi|e shop|xin chao)/.test(t)) return FAQ.greeting;
+  if (/that khong|lua dao|\blua\b|uy tin|tin duoc|co that|scam|co lua/.test(t)) return "Shop cam k\u1EBFt uy t\xEDn \u{1F91D} B\u1EA1n mua th\u1EB3ng tr\xEAn Shopee (gi\xE1 & b\u1EA3o h\xE0nh theo Shopee), shop ho\xE0n l\u1EA1i % hoa h\u1ED3ng cho b\u1EA1n. C\xF3 m\xE3 \u0111\u01A1n tra c\u1EE9u minh b\u1EA1ch nh\xE9!";
+  return null;
+}
+__name(botReply, "botReply");
+async function broadcastMsg(thread, env) {
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY) return;
+  try {
+    await fetch(env.SUPABASE_URL + "/realtime/v1/api/broadcast", {
+      method: "POST",
+      headers: { apikey: env.SUPABASE_SERVICE_KEY, "Authorization": "Bearer " + env.SUPABASE_SERVICE_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: [{ topic: "thread:" + thread, event: "msg", payload: {} }, { topic: "admin", event: "msg", payload: { thread } }] })
+    });
+  } catch (e) {
+  }
+}
+__name(broadcastMsg, "broadcastMsg");
 async function chatInsert(row, env) {
   if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY) return;
   try {
@@ -420,6 +444,7 @@ var SHOP_HTML = `<!doctype html>
 <meta property="og:type" content="website">
 <link rel="manifest" href="/manifest.json">
 <link rel="apple-touch-icon" href="/icon-192.png">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"><\/script>
 <style>
   :root{--o1:#FF9F45;--o2:#FF5C7A;--g1:#12b76a;--g2:#039855;--bg:#fff6f1;--ink:#2b2b2b;--mut:#8a8a8a}
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -503,6 +528,7 @@ var SHOP_HTML = `<!doctype html>
   .msg.user{background:linear-gradient(135deg,var(--o1),var(--o2));color:#fff;margin-left:auto;border-bottom-right-radius:4px}
   .msg.shop{background:#f1f3f7;color:#222;margin-right:auto;border-bottom-left-radius:4px}
   .msg .t{display:block;font-size:10px;opacity:.7;margin-top:2px}
+  .qchip{background:#fff3ec;color:#FF6B3D;border:1px solid #ffd9c9;border-radius:999px;padding:6px 12px;font-size:13px;font-weight:600;cursor:pointer}
 </style>
 </head>
 <body>
@@ -567,7 +593,8 @@ var SHOP_HTML = `<!doctype html>
 <div class="sheet-bg" id="chatbg"></div>
 <div class="sheet" id="chat">
   <div class="sheet-h"><b>\u{1F4AC} Chat v\u1EDBi shop</b><span><a class="link" id="helplink" style="font-size:13px;margin-right:14px">H\u01B0\u1EDBng d\u1EABn</a><span id="chatx" style="cursor:pointer">\u2715</span></span></div>
-  <div id="chatlist" style="min-height:160px;max-height:50vh;overflow-y:auto;padding:6px 0"></div>
+  <div id="chatlist" style="min-height:160px;max-height:46vh;overflow-y:auto;padding:6px 0"></div>
+  <div id="qchips" style="display:flex;gap:6px;flex-wrap:wrap;margin:4px 0"></div>
   <div class="inrow" style="margin-top:8px">
     <input id="chatinput" placeholder="Nh\u1EADp STK / nick Zalo / c\xE2u h\u1ECFi..." style="margin-top:0">
     <button class="paste" id="chatsend" style="color:#fff;background:linear-gradient(135deg,var(--o1),var(--o2));border-color:transparent">G\u1EEDi</button>
@@ -681,9 +708,13 @@ if(sbg)sbg.addEventListener('click',function(){openSheet(false)});
 var sx=$('sheetx');if(sx)sx.addEventListener('click',function(){openSheet(false)});
 var chat=$('chat'),chatbg=$('chatbg'),chatLastId=0,chatTimer=null;
 function chatThread(){var c='';try{c=localStorage.getItem('mlh_contact')||''}catch(e){}return (c&&c.length>=4)?c:('dev:'+UID)}
-function renderMsgs(ms,append){var box=$('chatlist');if(!append)box.innerHTML='';ms.forEach(function(m){if(m.id>chatLastId)chatLastId=m.id;var d=document.createElement('div');d.className='msg '+(m.sender==='admin'?'shop':'user');d.innerHTML=esc(m.text).replace(/\\n/g,'<br>')+'<span class="t">'+(m.when||'')+'</span>';box.appendChild(d)});box.scrollTop=box.scrollHeight}
+function renderMsgs(ms,append){var box=$('chatlist');if(!append)box.innerHTML='';ms.forEach(function(m){if(m.id>chatLastId)chatLastId=m.id;var d=document.createElement('div');d.className='msg '+(m.sender==='user'?'user':'shop');d.innerHTML=esc(m.text).replace(/\\n/g,'<br>')+'<span class="t">'+(m.when||'')+'</span>';box.appendChild(d)});box.scrollTop=box.scrollHeight}
+var QCHIPS=['C\xF3 m\u1EA5t ph\xED kh\xF4ng?','Bao l\xE2u nh\u1EADn \u0111\u01B0\u1EE3c ti\u1EC1n?','C\xE1ch nh\u1EADn ti\u1EC1n ho\xE0n?','C\xE1ch mua \u0111\u1EC3 \u0111\u01B0\u1EE3c ho\xE0n?'];
+function renderChips(){var el=$('qchips');if(!el)return;el.innerHTML=QCHIPS.map(function(q){return '<span class="qchip">'+esc(q)+'</span>'}).join('');Array.prototype.forEach.call(el.querySelectorAll('.qchip'),function(c){c.onclick=function(){$('chatinput').value=c.textContent;chatSend()}})}
 function chatLoad(){fetch('/chat-history?thread='+encodeURIComponent(chatThread())+(chatLastId?('&after='+chatLastId):'')).then(function(r){return r.json()}).then(function(d){var ms=(d&&d.messages)||[];if(chatLastId===0&&!ms.length){$('chatlist').innerHTML='<div class="msg shop">Ch\xE0o b\u1EA1n \u{1F44B} G\u1EEDi <b>STK ng\xE2n h\xE0ng</b> ho\u1EB7c <b>nick Zalo</b> \u0111\u1EC3 shop li\xEAn h\u1EC7 tr\u1EA3 ti\u1EC1n ho\xE0n. C\u1EA7n h\u1ED7 tr\u1EE3 g\xEC c\u1EE9 nh\u1EAFn nh\xE9!</div>'}else if(ms.length){renderMsgs(ms,chatLastId>0)}}).catch(function(){})}
-function openChat(o){if(!chat)return;chat.classList.toggle('open',o);chatbg.classList.toggle('open',o);if(o){chatLoad();chatTimer=setInterval(chatLoad,4000)}else if(chatTimer){clearInterval(chatTimer);chatTimer=null}}
+var SB=null,sbChan=null;
+function subRealtime(){try{if(!SB&&window.supabase){SB=window.supabase.createClient('https://atuwytlrpogbzwjbatdn.supabase.co','sb_publishable_MO6dUROk1mMHykOP1QVryQ_vBJYkJq9')}if(!SB)return;if(sbChan){SB.removeChannel(sbChan);sbChan=null}sbChan=SB.channel('thread:'+chatThread(),{config:{broadcast:{self:false}}}).on('broadcast',{event:'msg'},function(){chatLoad()}).subscribe()}catch(e){}}
+function openChat(o){if(!chat)return;chat.classList.toggle('open',o);chatbg.classList.toggle('open',o);if(o){renderChips();chatLoad();subRealtime();chatTimer=setInterval(chatLoad,4000)}else if(chatTimer){clearInterval(chatTimer);chatTimer=null}}
 if(fab)fab.addEventListener('click',function(){openChat(true)});
 if(chatbg)chatbg.addEventListener('click',function(){openChat(false)});
 var cx=$('chatx');if(cx)cx.addEventListener('click',function(){openChat(false)});
@@ -771,6 +802,10 @@ var ADMIN_HTML = `<!doctype html>
     <button id="btnLogin">\u0110\u0103ng nh\u1EADp</button></div>
     <p class="mut" id="lerr" style="margin-top:8px;color:#d92d20"></p>
   </div>
+  <div class="card" id="dash" style="display:none">
+    <b>\u{1F4CA} T\u1ED5ng quan</b>
+    <div id="stattiles" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px"></div>
+  </div>
   <div class="card" id="panel" style="display:none">
     <div class="bar" style="justify-content:space-between">
       <div><b id="cnt">0</b> \u0111\u01A1n \xB7 <span class="mut">m\u1EDBi nh\u1EA5t tr\u01B0\u1EDBc</span></div>
@@ -787,6 +822,7 @@ var ADMIN_HTML = `<!doctype html>
       <div id="threads" style="flex:1;min-width:170px;max-height:340px;overflow-y:auto"></div>
       <div style="flex:2;min-width:220px">
         <div id="cmsgs" style="max-height:280px;overflow-y:auto;border:1px solid #eef1f6;border-radius:8px;padding:8px;min-height:110px"></div>
+        <div id="cannedchips" style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0"></div>
         <div class="bar" style="margin-top:8px"><input id="creply" placeholder="Tr\u1EA3 l\u1EDDi kh\xE1ch..." style="flex:1"><button class="sm" id="csend">G\u1EEDi</button></div>
       </div>
     </div>
@@ -801,7 +837,7 @@ function login(){PASS=$('pass').value;$('lerr').textContent='';load(true)}
 function load(first){
   fetch('/admin-list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS})})
    .then(function(r){if(r.status===401){throw new Error('Sai m\u1EADt kh\u1EA9u')}return r.json()})
-   .then(function(d){$('login').style.display='none';$('panel').style.display='block';$('chatpanel').style.display='block';render(d.orders||[]);loadThreads()})
+   .then(function(d){$('login').style.display='none';$('dash').style.display='block';$('panel').style.display='block';$('chatpanel').style.display='block';render(d.orders||[]);loadStats();loadThreads();renderCanned();if(!window._thPoll)window._thPoll=setInterval(loadThreads,8000)})
    .catch(function(e){if(first)$('lerr').textContent=e.message||'L\u1ED7i'});
 }
 function render(rows){
@@ -836,6 +872,11 @@ function openThread(){if(!curThread)return;fetch('/admin-chat',{method:'POST',he
 $('csend').onclick=function(){var t=($('creply').value||'').trim();if(!t||!curThread)return;$('creply').value='';fetch('/admin-chat-reply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS,thread:curThread,text:t})}).then(function(){setTimeout(openThread,300);setTimeout(loadThreads,400)})};
 $('creply').addEventListener('keydown',function(e){if(e.key==='Enter')$('csend').click()});
 var syncb=$('syncbtn');if(syncb)syncb.onclick=function(){syncb.textContent='...';fetch('/admin-sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS})}).then(function(r){return r.json()}).then(function(d){syncb.textContent='\u{1F504} Sync AccessTrade';alert('\u0110\u1ED3ng b\u1ED9 xong: c\u1EADp nh\u1EADt '+(d.updated||0)+' \u0111\u01A1n (kh\u1EDBp '+(d.seen||0)+' giao d\u1ECBch c\xF3 m\xE3).');load(false)}).catch(function(){syncb.textContent='\u{1F504} Sync AccessTrade';alert('L\u1ED7i sync')})};
+function loadStats(){fetch('/admin-stats',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS})}).then(function(r){return r.json()}).then(function(d){var by=d.by||{};
+  function tile(l,v,c){return '<div style="flex:1;min-width:88px;background:#f7f9fc;border-radius:10px;padding:10px;text-align:center"><div style="font-size:22px;font-weight:800;color:'+c+'">'+v+'</div><div class="mut">'+l+'</div></div>'}
+  $('stattiles').innerHTML=tile('T\u1ED5ng \u0111\u01A1n',d.total||0,'#222')+tile('Ch\u1EDD mua',by.notified||0,'#e6a700')+tile('\u0110\xE3 mua',by.purchased||0,'#12b76a')+tile('\u0110\u1ED1i so\xE1t',by.confirmed||0,'#1f6feb')+tile('Ch\u1EDD ho\xE0n',d.pending||0,'#FF4E73')+tile('\u0110\xE3 ho\xE0n',d.paid||0,'#039855')}).catch(function(){})}
+var CANNED=['\u0110\xE3 nh\u1EADn STK, c\u1EA3m \u01A1n b\u1EA1n nh\xE9! \u{1F4B8}','\u0110\u01A1n \u0111ang \u0111\u1ED1i so\xE1t Shopee (~75\u2013105 ng\xE0y), c\xF3 ti\u1EC1n shop chuy\u1EC3n ngay \u1EA1.','B\u1EA1n g\u1EEDi gi\xFAp shop: STK + Ng\xE2n h\xE0ng + T\xEAn ch\u1EE7 TK nh\xE9.','B\u1EA1n nh\u1EDB b\u1EA5m link shop g\u1EEDi TR\u01AF\u1EDAC khi mua \u0111\u1EC3 \u0111\u01B0\u1EE3c ghi nh\u1EADn nha.'];
+function renderCanned(){var el=$('cannedchips');if(!el)return;el.innerHTML=CANNED.map(function(q,i){return '<span data-ci="'+i+'" style="background:#eef4ff;color:#1f6feb;border:1px solid #cdddff;border-radius:999px;padding:5px 10px;font-size:12px;cursor:pointer">'+esc(q.slice(0,20))+'\u2026</span>'}).join('');Array.prototype.forEach.call(el.querySelectorAll('[data-ci]'),function(c){c.onclick=function(){$('creply').value=CANNED[+c.getAttribute('data-ci')];if(curThread)$('csend').click()}})}
 <\/script>
 </body></html>`;
 function html(body) {
@@ -992,6 +1033,22 @@ var index_default = {
       const res = await syncAccessTrade(env);
       return json({ ok: true, updated: res.updated, seen: res.seen });
     }
+    if (request.method === "POST" && path === "/admin-stats") {
+      const body = await request.json().catch(() => ({}));
+      if (!checkAdmin(body.pass, env)) return json({ error: "unauthorized" }, 401);
+      let rows = [];
+      try {
+        const r = await fetch(env.SUPABASE_URL + "/rest/v1/submissions?select=status&limit=10000", { headers: { apikey: env.SUPABASE_SERVICE_KEY, "Authorization": "Bearer " + env.SUPABASE_SERVICE_KEY } });
+        rows = await r.json().catch(() => []);
+      } catch (e) {
+      }
+      const by = {};
+      rows.forEach((x) => {
+        const s = x.status === "web" ? "notified" : x.status;
+        by[s] = (by[s] || 0) + 1;
+      });
+      return json({ total: rows.length, by, pending: by.confirmed || 0, paid: by.paid || 0 });
+    }
     if (request.method === "GET" && path === "/manifest.json") return new Response(MANIFEST, { headers: { "Content-Type": "application/manifest+json", "Cache-Control": "public, max-age=3600" } });
     if (request.method === "GET" && path === "/sw.js") return new Response(SW_JS, { headers: { "Content-Type": "application/javascript", "Cache-Control": "no-cache", "Service-Worker-Allowed": "/" } });
     if (request.method === "GET" && path === "/icon-192.png") return iconResponse(ICON192);
@@ -1011,7 +1068,10 @@ var index_default = {
       if (!text) return json({ error: "empty" }, 400);
       const thread = contact && contact.length >= 4 ? contact : "dev:" + uid;
       await chatInsert({ thread, sender: "user", text }, env);
-      return json({ ok: true, thread });
+      const br = botReply(text);
+      if (br) await chatInsert({ thread, sender: "bot", text: br }, env);
+      ctx.waitUntil(broadcastMsg(thread, env));
+      return json({ ok: true, thread, bot: br || "" });
     }
     if (request.method === "GET" && path === "/chat-history") {
       const msgs = await chatHistory(url.searchParams.get("thread"), url.searchParams.get("after"), env);
@@ -1048,6 +1108,7 @@ var index_default = {
       const text = (body.text || "").trim().slice(0, 1e3);
       if (!text || !body.thread) return json({ error: "empty" }, 400);
       await chatInsert({ thread: body.thread, sender: "admin", text }, env);
+      ctx.waitUntil(broadcastMsg(body.thread, env));
       ctx.waitUntil(notifyThreadPush(body.thread, "\u{1F4AC} Shop tr\u1EA3 l\u1EDDi b\u1EA1n", text, env));
       return json({ ok: true });
     }

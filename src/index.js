@@ -205,6 +205,32 @@ async function syncAccessTrade(env) {
   return { updated, seen };
 }
 
+// Bot tu tra loi cau hoi thuong gap trong chat (khop tu khoa). Khong khop -> null (de admin tra loi).
+function botReply(text) {
+  // Bo dau tieng Viet de khop ca khi user go khong dau
+  const t = (text || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd');
+  if (/\bphi\b|mat tien|free|mien phi|ton tien|co tinh phi|tinh phi|co ton/.test(t)) return 'Dạ hoàn toàn MIỄN PHÍ ạ 🥰 Bạn chỉ dán link, mua như bình thường và nhận lại tiền hoàn.';
+  if (/bao lau|khi nao|may ngay|bao gio|lau khong|chung nao|luc nao|nhan tien khi/.test(t)) return FAQ.schedule;
+  if (/cach mua|lam sao mua|mua the nao|mua sao|huong dan|mua nhu the/.test(t)) return FAQ.howto;
+  if (/noi quy|dieu kien|quy dinh|luat le|nhu the nao moi duoc/.test(t)) return FAQ.rules;
+  if (/stk|so tai khoan|ngan hang|nhan tien|rut tien|nhan hoan|hoan ve|chuyen khoan|so tk/.test(t)) return 'Bạn gửi giúp shop: SỐ TÀI KHOẢN + NGÂN HÀNG + TÊN chủ TK (kèm ảnh đơn nếu có) để shop chuyển tiền hoàn theo lịch (ngày 20–25 hàng tháng) nhé 💸';
+  if (/^(chao|hi|hello|hey|alo|shop oi|e shop|xin chao)/.test(t)) return FAQ.greeting;
+  if (/that khong|lua dao|\blua\b|uy tin|tin duoc|co that|scam|co lua/.test(t)) return 'Shop cam kết uy tín 🤝 Bạn mua thẳng trên Shopee (giá & bảo hành theo Shopee), shop hoàn lại % hoa hồng cho bạn. Có mã đơn tra cứu minh bạch nhé!';
+  return null;
+}
+
+// Realtime: broadcast bao co tin moi (kenh theo thread + kenh admin)
+async function broadcastMsg(thread, env) {
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY) return;
+  try {
+    await fetch(env.SUPABASE_URL + '/realtime/v1/api/broadcast', {
+      method: 'POST',
+      headers: { apikey: env.SUPABASE_SERVICE_KEY, 'Authorization': 'Bearer ' + env.SUPABASE_SERVICE_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: [{ topic: 'thread:' + thread, event: 'msg', payload: {} }, { topic: 'admin', event: 'msg', payload: { thread } }] })
+    });
+  } catch (e) { /* ignore */ }
+}
+
 async function chatInsert(row, env) {
   if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY) return;
   try {
@@ -324,6 +350,7 @@ const SHOP_HTML = `<!doctype html>
 <meta property="og:type" content="website">
 <link rel="manifest" href="/manifest.json">
 <link rel="apple-touch-icon" href="/icon-192.png">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root{--o1:#FF9F45;--o2:#FF5C7A;--g1:#12b76a;--g2:#039855;--bg:#fff6f1;--ink:#2b2b2b;--mut:#8a8a8a}
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -407,6 +434,7 @@ const SHOP_HTML = `<!doctype html>
   .msg.user{background:linear-gradient(135deg,var(--o1),var(--o2));color:#fff;margin-left:auto;border-bottom-right-radius:4px}
   .msg.shop{background:#f1f3f7;color:#222;margin-right:auto;border-bottom-left-radius:4px}
   .msg .t{display:block;font-size:10px;opacity:.7;margin-top:2px}
+  .qchip{background:#fff3ec;color:#FF6B3D;border:1px solid #ffd9c9;border-radius:999px;padding:6px 12px;font-size:13px;font-weight:600;cursor:pointer}
 </style>
 </head>
 <body>
@@ -471,7 +499,8 @@ const SHOP_HTML = `<!doctype html>
 <div class="sheet-bg" id="chatbg"></div>
 <div class="sheet" id="chat">
   <div class="sheet-h"><b>💬 Chat với shop</b><span><a class="link" id="helplink" style="font-size:13px;margin-right:14px">Hướng dẫn</a><span id="chatx" style="cursor:pointer">✕</span></span></div>
-  <div id="chatlist" style="min-height:160px;max-height:50vh;overflow-y:auto;padding:6px 0"></div>
+  <div id="chatlist" style="min-height:160px;max-height:46vh;overflow-y:auto;padding:6px 0"></div>
+  <div id="qchips" style="display:flex;gap:6px;flex-wrap:wrap;margin:4px 0"></div>
   <div class="inrow" style="margin-top:8px">
     <input id="chatinput" placeholder="Nhập STK / nick Zalo / câu hỏi..." style="margin-top:0">
     <button class="paste" id="chatsend" style="color:#fff;background:linear-gradient(135deg,var(--o1),var(--o2));border-color:transparent">Gửi</button>
@@ -585,9 +614,13 @@ if(sbg)sbg.addEventListener('click',function(){openSheet(false)});
 var sx=$('sheetx');if(sx)sx.addEventListener('click',function(){openSheet(false)});
 var chat=$('chat'),chatbg=$('chatbg'),chatLastId=0,chatTimer=null;
 function chatThread(){var c='';try{c=localStorage.getItem('mlh_contact')||''}catch(e){}return (c&&c.length>=4)?c:('dev:'+UID)}
-function renderMsgs(ms,append){var box=$('chatlist');if(!append)box.innerHTML='';ms.forEach(function(m){if(m.id>chatLastId)chatLastId=m.id;var d=document.createElement('div');d.className='msg '+(m.sender==='admin'?'shop':'user');d.innerHTML=esc(m.text).replace(/\\n/g,'<br>')+'<span class="t">'+(m.when||'')+'</span>';box.appendChild(d)});box.scrollTop=box.scrollHeight}
+function renderMsgs(ms,append){var box=$('chatlist');if(!append)box.innerHTML='';ms.forEach(function(m){if(m.id>chatLastId)chatLastId=m.id;var d=document.createElement('div');d.className='msg '+(m.sender==='user'?'user':'shop');d.innerHTML=esc(m.text).replace(/\\n/g,'<br>')+'<span class="t">'+(m.when||'')+'</span>';box.appendChild(d)});box.scrollTop=box.scrollHeight}
+var QCHIPS=['Có mất phí không?','Bao lâu nhận được tiền?','Cách nhận tiền hoàn?','Cách mua để được hoàn?'];
+function renderChips(){var el=$('qchips');if(!el)return;el.innerHTML=QCHIPS.map(function(q){return '<span class="qchip">'+esc(q)+'</span>'}).join('');Array.prototype.forEach.call(el.querySelectorAll('.qchip'),function(c){c.onclick=function(){$('chatinput').value=c.textContent;chatSend()}})}
 function chatLoad(){fetch('/chat-history?thread='+encodeURIComponent(chatThread())+(chatLastId?('&after='+chatLastId):'')).then(function(r){return r.json()}).then(function(d){var ms=(d&&d.messages)||[];if(chatLastId===0&&!ms.length){$('chatlist').innerHTML='<div class="msg shop">Chào bạn 👋 Gửi <b>STK ngân hàng</b> hoặc <b>nick Zalo</b> để shop liên hệ trả tiền hoàn. Cần hỗ trợ gì cứ nhắn nhé!</div>'}else if(ms.length){renderMsgs(ms,chatLastId>0)}}).catch(function(){})}
-function openChat(o){if(!chat)return;chat.classList.toggle('open',o);chatbg.classList.toggle('open',o);if(o){chatLoad();chatTimer=setInterval(chatLoad,4000)}else if(chatTimer){clearInterval(chatTimer);chatTimer=null}}
+var SB=null,sbChan=null;
+function subRealtime(){try{if(!SB&&window.supabase){SB=window.supabase.createClient('https://atuwytlrpogbzwjbatdn.supabase.co','sb_publishable_MO6dUROk1mMHykOP1QVryQ_vBJYkJq9')}if(!SB)return;if(sbChan){SB.removeChannel(sbChan);sbChan=null}sbChan=SB.channel('thread:'+chatThread(),{config:{broadcast:{self:false}}}).on('broadcast',{event:'msg'},function(){chatLoad()}).subscribe()}catch(e){}}
+function openChat(o){if(!chat)return;chat.classList.toggle('open',o);chatbg.classList.toggle('open',o);if(o){renderChips();chatLoad();subRealtime();chatTimer=setInterval(chatLoad,4000)}else if(chatTimer){clearInterval(chatTimer);chatTimer=null}}
 if(fab)fab.addEventListener('click',function(){openChat(true)});
 if(chatbg)chatbg.addEventListener('click',function(){openChat(false)});
 var cx=$('chatx');if(cx)cx.addEventListener('click',function(){openChat(false)});
@@ -677,6 +710,10 @@ const ADMIN_HTML = `<!doctype html>
     <button id="btnLogin">Đăng nhập</button></div>
     <p class="mut" id="lerr" style="margin-top:8px;color:#d92d20"></p>
   </div>
+  <div class="card" id="dash" style="display:none">
+    <b>📊 Tổng quan</b>
+    <div id="stattiles" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px"></div>
+  </div>
   <div class="card" id="panel" style="display:none">
     <div class="bar" style="justify-content:space-between">
       <div><b id="cnt">0</b> đơn · <span class="mut">mới nhất trước</span></div>
@@ -693,6 +730,7 @@ const ADMIN_HTML = `<!doctype html>
       <div id="threads" style="flex:1;min-width:170px;max-height:340px;overflow-y:auto"></div>
       <div style="flex:2;min-width:220px">
         <div id="cmsgs" style="max-height:280px;overflow-y:auto;border:1px solid #eef1f6;border-radius:8px;padding:8px;min-height:110px"></div>
+        <div id="cannedchips" style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0"></div>
         <div class="bar" style="margin-top:8px"><input id="creply" placeholder="Trả lời khách..." style="flex:1"><button class="sm" id="csend">Gửi</button></div>
       </div>
     </div>
@@ -707,7 +745,7 @@ function login(){PASS=$('pass').value;$('lerr').textContent='';load(true)}
 function load(first){
   fetch('/admin-list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS})})
    .then(function(r){if(r.status===401){throw new Error('Sai mật khẩu')}return r.json()})
-   .then(function(d){$('login').style.display='none';$('panel').style.display='block';$('chatpanel').style.display='block';render(d.orders||[]);loadThreads()})
+   .then(function(d){$('login').style.display='none';$('dash').style.display='block';$('panel').style.display='block';$('chatpanel').style.display='block';render(d.orders||[]);loadStats();loadThreads();renderCanned();if(!window._thPoll)window._thPoll=setInterval(loadThreads,8000)})
    .catch(function(e){if(first)$('lerr').textContent=e.message||'Lỗi'});
 }
 function render(rows){
@@ -742,6 +780,11 @@ function openThread(){if(!curThread)return;fetch('/admin-chat',{method:'POST',he
 $('csend').onclick=function(){var t=($('creply').value||'').trim();if(!t||!curThread)return;$('creply').value='';fetch('/admin-chat-reply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS,thread:curThread,text:t})}).then(function(){setTimeout(openThread,300);setTimeout(loadThreads,400)})};
 $('creply').addEventListener('keydown',function(e){if(e.key==='Enter')$('csend').click()});
 var syncb=$('syncbtn');if(syncb)syncb.onclick=function(){syncb.textContent='...';fetch('/admin-sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS})}).then(function(r){return r.json()}).then(function(d){syncb.textContent='🔄 Sync AccessTrade';alert('Đồng bộ xong: cập nhật '+(d.updated||0)+' đơn (khớp '+(d.seen||0)+' giao dịch có mã).');load(false)}).catch(function(){syncb.textContent='🔄 Sync AccessTrade';alert('Lỗi sync')})};
+function loadStats(){fetch('/admin-stats',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS})}).then(function(r){return r.json()}).then(function(d){var by=d.by||{};
+  function tile(l,v,c){return '<div style="flex:1;min-width:88px;background:#f7f9fc;border-radius:10px;padding:10px;text-align:center"><div style="font-size:22px;font-weight:800;color:'+c+'">'+v+'</div><div class="mut">'+l+'</div></div>'}
+  $('stattiles').innerHTML=tile('Tổng đơn',d.total||0,'#222')+tile('Chờ mua',by.notified||0,'#e6a700')+tile('Đã mua',by.purchased||0,'#12b76a')+tile('Đối soát',by.confirmed||0,'#1f6feb')+tile('Chờ hoàn',d.pending||0,'#FF4E73')+tile('Đã hoàn',d.paid||0,'#039855')}).catch(function(){})}
+var CANNED=['Đã nhận STK, cảm ơn bạn nhé! 💸','Đơn đang đối soát Shopee (~75–105 ngày), có tiền shop chuyển ngay ạ.','Bạn gửi giúp shop: STK + Ngân hàng + Tên chủ TK nhé.','Bạn nhớ bấm link shop gửi TRƯỚC khi mua để được ghi nhận nha.'];
+function renderCanned(){var el=$('cannedchips');if(!el)return;el.innerHTML=CANNED.map(function(q,i){return '<span data-ci="'+i+'" style="background:#eef4ff;color:#1f6feb;border:1px solid #cdddff;border-radius:999px;padding:5px 10px;font-size:12px;cursor:pointer">'+esc(q.slice(0,20))+'…</span>'}).join('');Array.prototype.forEach.call(el.querySelectorAll('[data-ci]'),function(c){c.onclick=function(){$('creply').value=CANNED[+c.getAttribute('data-ci')];if(curThread)$('csend').click()}})}
 <\/script>
 </body></html>`;
 
@@ -886,6 +929,14 @@ export default {
       const res = await syncAccessTrade(env);
       return json({ ok: true, updated: res.updated, seen: res.seen });
     }
+    if (request.method === 'POST' && path === '/admin-stats') {
+      const body = await request.json().catch(() => ({}));
+      if (!checkAdmin(body.pass, env)) return json({ error: 'unauthorized' }, 401);
+      let rows = [];
+      try { const r = await fetch(env.SUPABASE_URL + '/rest/v1/submissions?select=status&limit=10000', { headers: { apikey: env.SUPABASE_SERVICE_KEY, 'Authorization': 'Bearer ' + env.SUPABASE_SERVICE_KEY } }); rows = await r.json().catch(() => []); } catch (e) { }
+      const by = {}; rows.forEach(x => { const s = x.status === 'web' ? 'notified' : x.status; by[s] = (by[s] || 0) + 1; });
+      return json({ total: rows.length, by, pending: by.confirmed || 0, paid: by.paid || 0 });
+    }
 
     // PWA: manifest, service worker, icons, push subscribe
     if (request.method === 'GET' && path === '/manifest.json') return new Response(MANIFEST, { headers: { 'Content-Type': 'application/manifest+json', 'Cache-Control': 'public, max-age=3600' } });
@@ -909,7 +960,10 @@ export default {
       if (!text) return json({ error: 'empty' }, 400);
       const thread = (contact && contact.length >= 4) ? contact : ('dev:' + uid);
       await chatInsert({ thread, sender: 'user', text }, env);
-      return json({ ok: true, thread });
+      const br = botReply(text);
+      if (br) await chatInsert({ thread, sender: 'bot', text: br }, env);
+      ctx.waitUntil(broadcastMsg(thread, env));
+      return json({ ok: true, thread, bot: br || '' });
     }
     if (request.method === 'GET' && path === '/chat-history') {
       const msgs = await chatHistory(url.searchParams.get('thread'), url.searchParams.get('after'), env);
@@ -936,6 +990,7 @@ export default {
       const text = (body.text || '').trim().slice(0, 1000);
       if (!text || !body.thread) return json({ error: 'empty' }, 400);
       await chatInsert({ thread: body.thread, sender: 'admin', text }, env);
+      ctx.waitUntil(broadcastMsg(body.thread, env));
       ctx.waitUntil(notifyThreadPush(body.thread, '💬 Shop trả lời bạn', text, env));
       return json({ ok: true });
     }
