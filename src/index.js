@@ -940,7 +940,8 @@ export default {
     ctx.waitUntil((async () => {
       try { await fetch((env.SUPABASE_URL || '') + '/rest/v1/submissions?select=id&limit=1', { headers: { apikey: env.SUPABASE_SERVICE_KEY, 'Authorization': 'Bearer ' + env.SUPABASE_SERVICE_KEY } }); } catch (e) {}  // keep-alive Supabase (chong auto-pause)
       try { await syncAccessTrade(env); } catch (e) {}  // auto-sync trang thai don tu AccessTrade
-      if (event && (event.cron === '0 5 * * *' || event.cron === '0 12 * * *')) { try { await postHotDeal(env); } catch (e) {} }  // dang DEAL HOT len Page 2 lan/ngay (12h & 19h VN)
+      const _h = new Date(event && event.scheduledTime ? event.scheduledTime : Date.now()).getUTCHours();
+      if (_h === 6 || _h === 12) { try { await postHotDeal(env); } catch (e) {} }  // dang DEAL HOT 2 lan/ngay (13h & 19h VN) tren cung 1 cron 6h
     })());
   },
 

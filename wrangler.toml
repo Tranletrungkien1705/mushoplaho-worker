@@ -5,5 +5,6 @@ compatibility_date = "2026-08-01"
 
 # Cron: keep-alive Supabase (chống auto-pause) + auto-sync trạng thái đơn từ AccessTrade
 # Chi con 6h (keep-alive + sync); dang bai hang ngay do repo mushoplaho-content (video) lo
+# 1 cron duy nhat (Free tier gioi han 5/tai khoan): keep-alive + sync + xet gio dang deal
 [triggers]
-crons = ["0 */6 * * *", "0 5 * * *", "0 12 * * *"]
+crons = ["0 */6 * * *"]
