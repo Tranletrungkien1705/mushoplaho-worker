@@ -4,7 +4,7 @@
 //              ACCESSTRADE_TOKEN, AT_CAMPAIGN_SHOPEE, AT_CAMPAIGN_TIKTOK, AT_CAMPAIGN_LAZADA
 // Cần cột Supabase submissions: order_code text, contact text (ngoài các cột sẵn có).
 
-import { ICON192, ICON512, OG } from './icons.js';
+import { ICON192, ICON512, OG, OG2, OG3 } from './icons.js';
 import { sendWebPush } from './webpush.js';
 
 const VAPID_PUBLIC = 'BGNY3uTCFDGgY6g5UyFMrLmwnRXmWWXAroYoqYrIypZbJ-87xho81HsRNHE9NsQvwY96ADXiAtRPSVIAGyJJfFQ';
@@ -750,6 +750,18 @@ const ADMIN_HTML = `<!doctype html>
       </div>
     </div>
   </div>
+  <div class="card" id="fbpanel">
+    <b>📤 Đăng bài lên Page Facebook</b>
+    <textarea id="fbmsg" style="width:100%;height:130px;margin-top:8px;padding:10px;border:1px solid #d7dce5;border-radius:8px;font-size:14px" placeholder="Nội dung bài đăng..."></textarea>
+    <div class="bar" style="margin-top:8px;gap:14px">Ảnh:
+      <label><input type="radio" name="fbimg" value="1" checked> Mẫu 1</label>
+      <label><input type="radio" name="fbimg" value="2"> Mẫu 2</label>
+      <label><input type="radio" name="fbimg" value="3"> Mẫu 3</label>
+      <a href="/og.png" target="_blank" style="font-size:12px">1</a><a href="/og2.png" target="_blank" style="font-size:12px">2</a><a href="/og3.png" target="_blank" style="font-size:12px">3</a>
+    </div>
+    <button class="sm" id="fbpost" style="margin-top:8px">📤 Đăng lên Page</button>
+    <span class="mut" id="fbresult" style="margin-left:10px"></span>
+  </div>
 </div>
 <script>
 var $=function(i){return document.getElementById(i)};var PASS='';
@@ -800,6 +812,11 @@ function loadStats(){fetch('/admin-stats',{method:'POST',headers:{'Content-Type'
   $('stattiles').innerHTML=tile('Tổng đơn',d.total||0,'#222')+tile('Chờ mua',by.notified||0,'#e6a700')+tile('Đã mua',by.purchased||0,'#12b76a')+tile('Đối soát',by.confirmed||0,'#1f6feb')+tile('Chờ hoàn',d.pending||0,'#FF4E73')+tile('Đã hoàn',d.paid||0,'#039855')}).catch(function(){})}
 var CANNED=['Đã nhận STK, cảm ơn bạn nhé! 💸','Đơn đang đối soát Shopee (~75–105 ngày), có tiền shop chuyển ngay ạ.','Bạn gửi giúp shop: STK + Ngân hàng + Tên chủ TK nhé.','Bạn nhớ bấm link shop gửi TRƯỚC khi mua để được ghi nhận nha.'];
 function renderCanned(){var el=$('cannedchips');if(!el)return;el.innerHTML=CANNED.map(function(q,i){return '<span data-ci="'+i+'" style="background:#eef4ff;color:#1f6feb;border:1px solid #cdddff;border-radius:999px;padding:5px 10px;font-size:12px;cursor:pointer">'+esc(q.slice(0,20))+'…</span>'}).join('');Array.prototype.forEach.call(el.querySelectorAll('[data-ci]'),function(c){c.onclick=function(){$('creply').value=CANNED[+c.getAttribute('data-ci')];if(curThread)$('csend').click()}})}
+var FBSAMPLE='🔥 MẸO MUA SHOPEE ĐƯỢC HOÀN LẠI TIỀN\\n\\nMua đồ Shopee như bình thường, qua 1 bước nhỏ là được HOÀN tới 50% hoa hồng của đơn về tài khoản 💸\\n\\n👉 Dán link sản phẩm vào: mushoplaho.kientlt59.workers.dev\\nMiễn phí, không cần cài app. Ai hay mua Shopee lưu lại nhé!';
+if($('fbmsg')&&!$('fbmsg').value)$('fbmsg').value=FBSAMPLE;
+var fbp=$('fbpost');if(fbp)fbp.onclick=function(){var img='1',rs=document.getElementsByName('fbimg');for(var i=0;i<rs.length;i++)if(rs[i].checked)img=rs[i].value;
+  fbp.textContent='Đang đăng...';$('fbresult').textContent='';
+  fetch('/admin-fb-post',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS,message:$('fbmsg').value,img:img})}).then(function(r){return r.json()}).then(function(d){fbp.textContent='📤 Đăng lên Page';$('fbresult').textContent=d.ok?('✅ Đã đăng! id '+d.id):('❌ '+(d.error||'lỗi'))}).catch(function(){fbp.textContent='📤 Đăng lên Page';$('fbresult').textContent='❌ lỗi mạng'})};
 <\/script>
 </body></html>`;
 
@@ -955,6 +972,22 @@ export default {
       const by = {}; rows.forEach(x => { const s = x.status === 'web' ? 'notified' : x.status; by[s] = (by[s] || 0) + 1; });
       return json({ total: rows.length, by, pending: by.confirmed || 0, paid: by.paid || 0 });
     }
+    if (request.method === 'POST' && path === '/admin-fb-post') {
+      const body = await request.json().catch(() => ({}));
+      if (!checkAdmin(body.pass, env)) return json({ error: 'unauthorized' }, 401);
+      const token = env.FB_PAGE_POST_TOKEN || '';
+      if (!token) return json({ ok: false, error: 'Chưa có FB_PAGE_POST_TOKEN (token quyền pages_manage_posts). Xem hướng dẫn.' }, 400);
+      const msg = (body.message || '').slice(0, 5000);
+      const imgMap = { '1': '/og.png', '2': '/og2.png', '3': '/og3.png' };
+      const imgUrl = 'https://mushoplaho.kientlt59.workers.dev' + (imgMap[String(body.img)] || '/og.png');
+      try {
+        const form = new URLSearchParams({ url: imgUrl, caption: msg, access_token: token });
+        const r = await fetch('https://graph.facebook.com/v19.0/1240334605834446/photos', { method: 'POST', body: form });
+        const j = await r.json().catch(() => ({}));
+        if (j && j.id) return json({ ok: true, id: j.id });
+        return json({ ok: false, error: (j.error && j.error.message) || 'Lỗi đăng' }, 400);
+      } catch (e) { return json({ ok: false, error: String(e) }, 500); }
+    }
 
     // PWA: manifest, service worker, icons, push subscribe
     if (request.method === 'GET' && path === '/manifest.json') return new Response(MANIFEST, { headers: { 'Content-Type': 'application/manifest+json', 'Cache-Control': 'public, max-age=3600' } });
@@ -962,6 +995,8 @@ export default {
     if (request.method === 'GET' && path === '/icon-192.png') return iconResponse(ICON192);
     if (request.method === 'GET' && path === '/icon-512.png') return iconResponse(ICON512);
     if (request.method === 'GET' && path === '/og.png') return iconResponse(OG);
+    if (request.method === 'GET' && path === '/og2.png') return iconResponse(OG2);
+    if (request.method === 'GET' && path === '/og3.png') return iconResponse(OG3);
     if (request.method === 'POST' && path === '/push-subscribe') {
       const body = await request.json().catch(() => ({}));
       const sub = body.sub;
