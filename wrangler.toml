@@ -4,5 +4,6 @@ compatibility_date = "2026-08-01"
 # Không cần binding gì thêm — tất cả secret set bằng: wrangler secret put <NAME>
 
 # Cron: keep-alive Supabase (chống auto-pause) + auto-sync trạng thái đơn từ AccessTrade
+# Chi con 6h (keep-alive + sync); dang bai hang ngay do repo mushoplaho-content (video) lo
 [triggers]
-crons = ["0 */6 * * *", "0 3 * * *"]
+crons = ["0 */6 * * *"]
