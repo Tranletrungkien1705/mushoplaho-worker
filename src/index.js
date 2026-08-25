@@ -4,7 +4,7 @@
 //              ACCESSTRADE_TOKEN, AT_CAMPAIGN_SHOPEE, AT_CAMPAIGN_TIKTOK, AT_CAMPAIGN_LAZADA
 // Cần cột Supabase submissions: order_code text, contact text (ngoài các cột sẵn có).
 
-import { ICON192, ICON512 } from './icons.js';
+import { ICON192, ICON512, OG } from './icons.js';
 import { sendWebPush } from './webpush.js';
 
 const VAPID_PUBLIC = 'BGNY3uTCFDGgY6g5UyFMrLmwnRXmWWXAroYoqYrIypZbJ-87xho81HsRNHE9NsQvwY96ADXiAtRPSVIAGyJJfFQ';
@@ -345,9 +345,13 @@ const SHOP_HTML = `<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#FF6B4A">
 <title>Mushoplaho - Mua Là Hoàn</title>
-<meta property="og:title" content="Mushoplaho — Mua Là Hoàn">
-<meta property="og:description" content="Dán link Shopee, nhận lại đến 50% hoa hồng. Miễn phí, không cần cài app.">
+<meta property="og:title" content="Mushoplaho — Mua Shopee, nhận lại đến 50% hoa hồng 💸">
+<meta property="og:description" content="Dán link Shopee → nhận link hoàn tiền. Miễn phí, không cần cài app. Hoàn 50% hoa hồng về tài khoản bạn!">
 <meta property="og:type" content="website">
+<meta property="og:image" content="https://mushoplaho.kientlt59.workers.dev/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="manifest" href="/manifest.json">
 <link rel="apple-touch-icon" href="/icon-192.png">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -486,6 +490,12 @@ const SHOP_HTML = `<!doctype html>
       <button class="btn ghost" id="installbtn" style="display:none;flex:1;margin-top:0">📲 Cài app về máy</button>
       <button class="btn ghost" id="notifybtn" style="flex:1;margin-top:0">🔔 Báo khi tiền về</button>
     </div>
+  </div>
+
+  <div class="card refer">
+    <h2>🎁 Mời bạn bè cùng nhận hoàn tiền</h2>
+    <p class="muted" style="text-align:left;margin:0 0 8px">Gửi link này cho bạn bè — ai vào mua qua bạn, cộng đồng deal càng mạnh <span id="refcount"></span></p>
+    <div class="inrow"><input id="reflink" readonly style="margin-top:0;font-size:13px" value=""><button class="paste" id="refcopy">Copy</button></div>
   </div>
 
   <footer>
@@ -631,6 +641,10 @@ var ci=$('chatinput');if(ci)ci.addEventListener('keydown',function(e){if(e.key==
 var hl=$('helplink');if(hl)hl.addEventListener('click',function(){openChat(false);openSheet(true)});
 function tryClip(){if(url.value)return;try{if(navigator.clipboard&&navigator.clipboard.readText){navigator.clipboard.readText().then(function(t){t=(t||'').trim();if(!url.value&&/^https?:\\/\\//.test(t)&&/shopee|shp\\.ee/i.test(t)){url.value=t;tst('Đã tự dán link Shopee 📋')}}).catch(function(){})}}catch(e){}}
 window.addEventListener('focus',tryClip);setTimeout(tryClip,400);
+(function(){var rp=new URLSearchParams(location.search).get('ref');if(rp)try{localStorage.setItem('mlh_ref',rp)}catch(e){}})();
+var rl=$('reflink');if(rl)rl.value=location.origin+'/?ref='+UID;
+var rcp=$('refcopy');if(rcp)rcp.onclick=function(){if(navigator.clipboard&&rl){navigator.clipboard.writeText(rl.value).then(function(){tst('Đã copy link mời ✅')}).catch(function(){tst(rl.value)})}else if(rl)tst(rl.value)};
+fetch('/ref-stats?uid='+encodeURIComponent(UID)).then(function(r){return r.json()}).then(function(d){if(d&&d.count>0)$('refcount').textContent='— đã mời '+d.count+' người 🎉'}).catch(function(){});
 loadWallet();loadDeals();
 <\/script>
 </body>
@@ -943,6 +957,7 @@ export default {
     if (request.method === 'GET' && path === '/sw.js') return new Response(SW_JS, { headers: { 'Content-Type': 'application/javascript', 'Cache-Control': 'no-cache', 'Service-Worker-Allowed': '/' } });
     if (request.method === 'GET' && path === '/icon-192.png') return iconResponse(ICON192);
     if (request.method === 'GET' && path === '/icon-512.png') return iconResponse(ICON512);
+    if (request.method === 'GET' && path === '/og.png') return iconResponse(OG);
     if (request.method === 'POST' && path === '/push-subscribe') {
       const body = await request.json().catch(() => ({}));
       const sub = body.sub;
@@ -997,6 +1012,16 @@ export default {
 
     // Deal hot (auto tu AccessTrade)
     if (request.method === 'GET' && path === '/deals') return dealsResponse(env, ctx);
+
+    // Dem so nguoi da moi (referral)
+    if (request.method === 'GET' && path === '/ref-stats') {
+      const rid = url.searchParams.get('uid'); let count = 0;
+      if (rid) try {
+        const r = await fetch(env.SUPABASE_URL + '/rest/v1/submissions?select=id&ref_by=eq.' + encodeURIComponent(rid), { headers: { apikey: env.SUPABASE_SERVICE_KEY, 'Authorization': 'Bearer ' + env.SUPABASE_SERVICE_KEY, 'Prefer': 'count=exact', 'Range': '0-0' } });
+        const cr = r.headers.get('content-range') || ''; const m = cr.match(/\/(\d+)/); if (m) count = parseInt(m[1], 10);
+      } catch (e) { }
+      return json({ count });
+    }
 
     // Social proof counter
     if (request.method === 'GET' && path === '/shop-stats') {
