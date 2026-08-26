@@ -343,7 +343,7 @@ async function notifyThreadPush(thread, title, bodyText, env) {
 
 function statusLabel(s) {
   const m = { notified: '🟡 Đã tạo link — chờ bạn mua', web: '🟡 Đã tạo link — chờ bạn mua',
-    purchased: '🟢 Đã ghi nhận mua', confirmed: '🔵 Shopee đã đối soát', paid: '✅ Đã hoàn tiền' };
+    purchased: '🟢 Đã ghi nhận mua', confirmed: '🔵 Sàn đã đối soát', paid: '✅ Đã hoàn tiền' };
   return m[s] || '🟡 Đang xử lý';
 }
 
@@ -524,7 +524,7 @@ const SHOP_HTML = `<!doctype html>
   <div class="sub">Dán link Shopee — nhận lại đến <b>50%</b> 💸</div>
   <div class="hero-box">
     <div class="inrow">
-      <input id="url" type="url" inputmode="url" placeholder="Dán link Shopee vào đây..." autocomplete="off">
+      <input id="url" type="url" inputmode="url" placeholder="Dán link Shopee / TikTok Shop..." autocomplete="off">
       <button class="paste" id="paste" type="button">📋 Dán</button>
     </div>
     <button class="btn" id="go">🎁 Nhận link hoàn tiền ngay</button>
@@ -720,7 +720,7 @@ function chatSend(){var el=$('chatinput'),t=(el.value||'').trim();if(!t)return;e
 var csd=$('chatsend');if(csd)csd.addEventListener('click',chatSend);
 var ci=$('chatinput');if(ci)ci.addEventListener('keydown',function(e){if(e.key==='Enter')chatSend()});
 var hl=$('helplink');if(hl)hl.addEventListener('click',function(){openChat(false);openSheet(true)});
-function tryClip(){if(url.value)return;try{if(navigator.clipboard&&navigator.clipboard.readText){navigator.clipboard.readText().then(function(t){t=(t||'').trim();if(!url.value&&/^https?:\\/\\//.test(t)&&/shopee|shp\\.ee/i.test(t)){url.value=t;tst('Đã tự dán link Shopee 📋')}}).catch(function(){})}}catch(e){}}
+function tryClip(){if(url.value)return;try{if(navigator.clipboard&&navigator.clipboard.readText){navigator.clipboard.readText().then(function(t){t=(t||'').trim();if(!url.value&&/^https?:\\/\\//.test(t)&&/shopee|shp\\.ee|tiktok/i.test(t)){url.value=t;tst('Đã tự dán link 📋')}}).catch(function(){})}}catch(e){}}
 window.addEventListener('focus',tryClip);setTimeout(tryClip,400);
 (function(){var rp=new URLSearchParams(location.search).get('ref');if(rp)try{localStorage.setItem('mlh_ref',rp)}catch(e){}})();
 var rl=$('reflink');if(rl)rl.value=location.origin+'/?ref='+UID;
