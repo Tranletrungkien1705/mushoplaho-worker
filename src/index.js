@@ -199,7 +199,7 @@ async function supabaseFind(q, env) {
 async function supabaseList(env, limit) {
   if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY) return [];
   try {
-    const r = await fetch(env.SUPABASE_URL + `/rest/v1/submissions?select=order_code,contact,bank_info,admin_note,platform,status,original_url,created_at&order=id.desc&limit=${limit || 50}`, {
+    const r = await fetch(env.SUPABASE_URL + `/rest/v1/submissions?select=*&order=id.desc&limit=${limit || 50}`, {
       headers: { apikey: env.SUPABASE_SERVICE_KEY, 'Authorization': 'Bearer ' + env.SUPABASE_SERVICE_KEY }
     });
     if (!r.ok) return [];
@@ -224,38 +224,58 @@ async function supabaseUpdate(orderCode, patch, env) {
 
 function checkAdmin(pass, env) { return !!(pass && env.ADMIN_TOKEN && pass === env.ADMIN_TOKEN); }
 
-// Chi update status neu chua 'paid' (auto-sync khong duoc ha cap don da hoan cho khach)
-async function syncSetStatus(orderCode, status, env) {
+// Chi update neu chua 'paid' (auto-sync khong duoc ha cap don da hoan cho khach). Ghi ca cashback (tien user = 50% hoa hong).
+async function syncSetStatusCashback(orderCode, status, cashback, commission, env) {
   if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY || !orderCode) return false;
+  const patch = { status };
+  if (cashback != null && !isNaN(cashback)) patch.cashback = cashback;
+  if (commission != null && !isNaN(commission)) patch.commission = commission;
+  const url = env.SUPABASE_URL + `/rest/v1/submissions?order_code=eq.${encodeURIComponent(orderCode)}&status=neq.paid`;
+  const hdr = { apikey: env.SUPABASE_SERVICE_KEY, 'Authorization': 'Bearer ' + env.SUPABASE_SERVICE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' };
   try {
-    const r = await fetch(env.SUPABASE_URL + `/rest/v1/submissions?order_code=eq.${encodeURIComponent(orderCode)}&status=neq.paid`, {
-      method: 'PATCH',
-      headers: { apikey: env.SUPABASE_SERVICE_KEY, 'Authorization': 'Bearer ' + env.SUPABASE_SERVICE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-      body: JSON.stringify({ status })
-    });
+    let r = await fetch(url, { method: 'PATCH', headers: hdr, body: JSON.stringify(patch) });
+    // Neu cot cashback/commission chua ton tai -> PATCH 400: thu lai chi voi status (khong regress sync)
+    if (!r.ok && (patch.cashback !== undefined || patch.commission !== undefined)) {
+      r = await fetch(url, { method: 'PATCH', headers: hdr, body: JSON.stringify({ status }) });
+    }
     return r.ok;
   } catch (e) { return false; }
 }
 
-// Dong bo status don tu AccessTrade /v1/transactions (khop utm_content = order_code)
+// Ti le user duoc huong tren hoa hong publisher (0.5 = hoan 50%)
+const CASHBACK_RATE = 0.5;
+
+// Dong bo status + TIEN HOAN tu AccessTrade /v1/transactions (khop utm_content = order_code)
 // status AT: 0 hold -> 'purchased', 1 approved -> 'confirmed', 2 rejected -> 'cancelled'. 'paid' (da chuyen khach) van thu cong.
+// 1 order_code co the co nhieu dong giao dich (nhieu san pham) -> GOM lai + cong hoa hong.
 async function syncAccessTrade(env) {
   const TOKEN = env.ACCESSTRADE_TOKEN;
   if (!TOKEN) return { updated: 0, seen: 0 };
   const until = new Date();
-  const since = new Date(until.getTime() - 100 * 24 * 3600 * 1000);
+  const since = new Date(until.getTime() - 120 * 24 * 3600 * 1000);
   const iso = d => d.toISOString().slice(0, 19) + 'Z';
   let updated = 0, seen = 0;
   try {
     const r = await fetch(`https://api.accesstrade.vn/v1/transactions?since=${iso(since)}&until=${iso(until)}&limit=1000`, { headers: { 'Authorization': 'Token ' + TOKEN } });
     const j = await r.json().catch(() => ({}));
     const data = (j && j.data) || [];
+    const agg = {};   // code -> { s:[status...], com:tong hoa hong }
     for (const t of data) {
       const code = t.utm_content;
       if (!code || !/^MLH-/i.test(code)) continue;
       seen++;
-      const st = t.status === 2 ? 'cancelled' : (t.status === 1 ? 'confirmed' : 'purchased');
-      if (await syncSetStatus(code, st, env)) updated++;
+      // ten field hoa hong publisher co the khac tuy version -> thu nhieu ten
+      const com = parseFloat(t.pub_commission != null ? t.pub_commission : (t.commission != null ? t.commission : (t.pub_commission_amount != null ? t.pub_commission_amount : 0))) || 0;
+      if (!agg[code]) agg[code] = { s: [], com: 0 };
+      agg[code].s.push(t.status);
+      if (t.status !== 2) agg[code].com += com;   // don huy khong tinh tien
+    }
+    for (const code of Object.keys(agg)) {
+      const a = agg[code];
+      const status = a.s.indexOf(1) >= 0 ? 'confirmed' : (a.s.indexOf(0) >= 0 ? 'purchased' : 'cancelled');
+      const commission = Math.round(a.com);
+      const cashback = Math.round(a.com * CASHBACK_RATE);
+      if (await syncSetStatusCashback(code, status, cashback, commission, env)) updated++;
     }
   } catch (e) { /* ignore */ }
   return { updated, seen };
@@ -536,9 +556,10 @@ const SHOP_HTML = `<!doctype html>
   </div>
 
   <div class="card" id="wallet" style="display:none">
-    <h2>🧾 Đơn của bạn <span class="mut" id="wcount" style="font-weight:400"></span></h2>
+    <h2>💰 Ví hoàn tiền của bạn <span class="mut" id="wcount" style="font-weight:400"></span></h2>
+    <div id="wsummary" style="display:flex;gap:8px;margin-bottom:12px"></div>
     <div id="walletlist"></div>
-    <p class="muted" style="text-align:left"><a class="link" href="/track">🔎 Tra cứu / xem tất cả</a></p>
+    <p class="muted" style="text-align:left;margin-top:6px">💸 Tiền hoàn tự động cập nhật sau khi Shopee đối soát. <a class="link" href="/track">Xem tất cả</a></p>
   </div>
 
   <div class="card">
@@ -611,10 +632,13 @@ function loadWallet(){
   var q=(c&&c.length>=4)?c:('dev:'+UID);
   fetch('/track-lookup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:q})})
    .then(function(r){return r.json()}).then(function(d){var o=(d&&d.orders)||[];if(!o.length)return;
+     var sm=(d&&d.summary)||{expected:0,paid:0,pending:0};
      $('wcount').textContent='('+o.length+' đơn)';
-     $('walletlist').innerHTML=o.slice(0,6).map(function(r){return '<div style="border-bottom:1px dashed #ffe3d6;padding:9px 0;font-size:14px"><b>'+(r.order_code||'')+'</b> — '+(r.status_label||'')+'<div class="mut">'+(r.platform||'')+' · '+(r.when||'')+'</div></div>'}).join('');
+     $('wsummary').innerHTML=wtile('Tổng hoàn dự kiến',sm.expected,'#FF4E73')+wtile('Đang chờ về',sm.pending,'#e6a700')+wtile('Đã hoàn',sm.paid,'#039855');
+     $('walletlist').innerHTML=o.slice(0,6).map(function(r){return '<div style="border-bottom:1px dashed #ffe3d6;padding:9px 0;font-size:14px;display:flex;justify-content:space-between;gap:8px"><div><b>'+(r.order_code||'')+'</b> — '+(r.status_label||'')+'<div class="mut">'+(r.platform||'')+' · '+(r.when||'')+'</div></div><div style="font-weight:800;color:#FF4E73;white-space:nowrap">'+(r.cashback>0?('+'+fmt(r.cashback)):'—')+'</div></div>'}).join('');
      $('wallet').style.display='block';}).catch(function(){});
 }
+function wtile(l,v,c){return '<div style="flex:1;min-width:92px;background:#fff7f3;border:1px solid #ffe1d4;border-radius:12px;padding:10px;text-align:center"><div style="font-size:17px;font-weight:800;color:'+c+'">'+fmt(v||0)+'</div><div class="mut" style="font-size:11px">'+l+'</div></div>'}
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
 function fmt(n){n=parseInt(n,10)||0;return n.toLocaleString('vi-VN')+'đ'}
 function loadDeals(){
@@ -736,15 +760,18 @@ const TRACK_HTML = `<!doctype html>
 </div>
 <script>
 var $=function(i){return document.getElementById(i)};var out=$('out');
-function render(rows){
+function fmt(n){n=parseInt(n,10)||0;return n.toLocaleString('vi-VN')+'đ'}
+function wtile(l,v,c){return '<div style="flex:1;min-width:92px;background:#fff7f3;border:1px solid #ffe1d4;border-radius:12px;padding:10px;text-align:center"><div style="font-size:16px;font-weight:800;color:'+c+'">'+fmt(v||0)+'</div><div class="mut" style="font-size:11px">'+l+'</div></div>'}
+function render(d){var rows=(d&&d.orders)||[];var sm=(d&&d.summary)||{expected:0,paid:0,pending:0};
   if(!rows.length){out.innerHTML='<p class="mut" style="margin-top:12px">Không tìm thấy đơn. Kiểm tra lại mã/SĐT nhé.</p>';return}
-  out.innerHTML=rows.map(function(r){return '<div class="row"><div class="st">'+(r.order_code||'(chưa có mã)')+' — '+r.status_label+'</div><div class="mut">'+(r.platform||'')+' · '+(r.when||'')+'</div></div>';}).join('')
-   +'<p class="mut" style="margin-top:12px">💸 Lịch hoàn: ngày 20–25 hàng tháng, sau khi Shopee đối soát (~75–105 ngày).</p>';
+  var tiles='<div style="display:flex;gap:8px;margin:12px 0">'+wtile('Tổng dự kiến',sm.expected,'#FF4E73')+wtile('Đang chờ',sm.pending,'#e6a700')+wtile('Đã hoàn',sm.paid,'#039855')+'</div>';
+  out.innerHTML=tiles+rows.map(function(r){return '<div class="row" style="display:flex;justify-content:space-between;gap:8px"><div><div class="st">'+(r.order_code||'(chưa có mã)')+' — '+r.status_label+'</div><div class="mut">'+(r.platform||'')+' · '+(r.when||'')+'</div></div><div style="font-weight:800;color:#FF4E73;white-space:nowrap">'+(r.cashback>0?('+'+fmt(r.cashback)):'—')+'</div></div>';}).join('')
+   +'<p class="mut" style="margin-top:12px">💸 Tiền hoàn = 50% hoa hồng đơn. Chuyển ngày 20–25 hàng tháng, sau khi Shopee đối soát (~75–105 ngày).</p>';
 }
 function look(){var q=($('q').value||'').trim();if(q.length<4){out.innerHTML='<p class="mut" style="margin-top:12px">Nhập mã đơn hoặc SĐT nhé.</p>';return}
   out.innerHTML='<p class="mut" style="margin-top:12px">Đang tra...</p>';
   fetch('/track-lookup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:q})})
-   .then(function(r){return r.json()}).then(function(d){render((d&&d.orders)||[])})
+   .then(function(r){return r.json()}).then(function(d){render(d||{})})
    .catch(function(){out.innerHTML='<p class="mut">Lỗi, thử lại sau.</p>'});}
 $('go').addEventListener('click',look);$('q').addEventListener('keydown',function(e){if(e.key==='Enter')look()});
 var qs=new URLSearchParams(location.search).get('q');if(qs){$('q').value=qs;look()}
@@ -792,7 +819,7 @@ const ADMIN_HTML = `<!doctype html>
     </div>
     <p class="mut" style="margin-top:6px">Trạng thái <b>Đã mua/Đối soát/Huỷ</b> tự đồng bộ từ AccessTrade (6h/lần hoặc bấm Sync). Bạn chỉ cần chọn <b>"Đã hoàn"</b> khi đã chuyển tiền cho khách.</p>
     <div class="ov"><table id="tbl"><thead><tr>
-      <th>Mã đơn</th><th>Liên hệ</th><th>STK ngân hàng</th><th>Sàn</th><th>Trạng thái</th><th>Ghi chú</th><th></th><th>Link</th>
+      <th>Mã đơn</th><th>Liên hệ</th><th>STK ngân hàng</th><th>Sàn</th><th>Hoàn</th><th>Trạng thái</th><th>Ghi chú</th><th></th><th>Link</th>
     </tr></thead><tbody></tbody></table></div>
   </div>
   <div class="card" id="chatpanel" style="display:none">
@@ -843,6 +870,7 @@ function render(rows){
     return '<tr><td><b>'+esc(r.order_code)+'</b><div class="mut">'+d+'</div></td><td>'+esc(r.contact)+'</td>'
       +'<td><input class="stk" data-c="'+esc(r.order_code)+'" value="'+esc(r.bank_info)+'" placeholder="STK / NH / tên" style="width:160px"></td>'
       +'<td>'+esc(r.platform)+'</td>'
+      +'<td style="white-space:nowrap;font-weight:700;color:#FF4E73">'+(r.cashback>0?(Number(r.cashback).toLocaleString('vi-VN')+'đ'):'')+'</td>'
       +'<td><select data-c="'+esc(r.order_code)+'">'+opts(r.status)+'</select></td>'
       +'<td><input class="note" data-c="'+esc(r.order_code)+'" value="'+esc(r.admin_note)+'" placeholder="ghi chú" style="width:120px"></td>'
       +'<td><button class="sm" data-save="'+esc(r.order_code)+'">Lưu</button></td>'
@@ -868,7 +896,9 @@ $('creply').addEventListener('keydown',function(e){if(e.key==='Enter')$('csend')
 var syncb=$('syncbtn');if(syncb)syncb.onclick=function(){syncb.textContent='...';fetch('/admin-sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS})}).then(function(r){return r.json()}).then(function(d){syncb.textContent='🔄 Sync AccessTrade';alert('Đồng bộ xong: cập nhật '+(d.updated||0)+' đơn (khớp '+(d.seen||0)+' giao dịch có mã).');load(false)}).catch(function(){syncb.textContent='🔄 Sync AccessTrade';alert('Lỗi sync')})};
 function loadStats(){fetch('/admin-stats',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS})}).then(function(r){return r.json()}).then(function(d){var by=d.by||{};
   function tile(l,v,c){return '<div style="flex:1;min-width:88px;background:#f7f9fc;border-radius:10px;padding:10px;text-align:center"><div style="font-size:22px;font-weight:800;color:'+c+'">'+v+'</div><div class="mut">'+l+'</div></div>'}
-  $('stattiles').innerHTML=tile('Tổng đơn',d.total||0,'#222')+tile('Chờ mua',by.notified||0,'#e6a700')+tile('Đã mua',by.purchased||0,'#12b76a')+tile('Đối soát',by.confirmed||0,'#1f6feb')+tile('Chờ hoàn',d.pending||0,'#FF4E73')+tile('Đã hoàn',d.paid||0,'#039855')}).catch(function(){})}
+  function money(n){return (Math.round(n||0)).toLocaleString('vi-VN')+'đ'}
+  $('stattiles').innerHTML=tile('Tổng đơn',d.total||0,'#222')+tile('Chờ mua',by.notified||0,'#e6a700')+tile('Đã mua',by.purchased||0,'#12b76a')+tile('Đối soát',by.confirmed||0,'#1f6feb')+tile('Chờ hoàn',d.pending||0,'#FF4E73')+tile('Đã hoàn',d.paid||0,'#039855')
+    +tile('Tiền hoàn phải trả',money(d.cbPending),'#FF4E73')+tile('Đã trả (tiền)',money(d.cbPaid),'#039855')}).catch(function(){})}
 var CANNED=['Đã nhận STK, cảm ơn bạn nhé! 💸','Đơn đang đối soát Shopee (~75–105 ngày), có tiền shop chuyển ngay ạ.','Bạn gửi giúp shop: STK + Ngân hàng + Tên chủ TK nhé.','Bạn nhớ bấm link shop gửi TRƯỚC khi mua để được ghi nhận nha.'];
 function renderCanned(){var el=$('cannedchips');if(!el)return;el.innerHTML=CANNED.map(function(q,i){return '<span data-ci="'+i+'" style="background:#eef4ff;color:#1f6feb;border:1px solid #cdddff;border-radius:999px;padding:5px 10px;font-size:12px;cursor:pointer">'+esc(q.slice(0,20))+'…</span>'}).join('');Array.prototype.forEach.call(el.querySelectorAll('[data-ci]'),function(c){c.onclick=function(){$('creply').value=CANNED[+c.getAttribute('data-ci')];if(curThread)$('csend').click()}})}
 var FBSAMPLE='🔥 MẸO MUA SHOPEE ĐƯỢC HOÀN LẠI TIỀN\\n\\nMua đồ Shopee như bình thường, qua 1 bước nhỏ là được HOÀN tới 50% hoa hồng của đơn về tài khoản 💸\\n\\n👉 Dán link sản phẩm vào: mushoplaho.kientlt59.workers.dev\\nMiễn phí, không cần cài app. Ai hay mua Shopee lưu lại nhé!';
@@ -996,15 +1026,18 @@ export default {
       return json({ buy_url: aff, order_code: code });
     }
 
-    // Tra cứu đơn
+    // Tra cứu đơn + tong tien hoan (vi cashback)
     if (request.method === 'POST' && path === '/track-lookup') {
       const body = await request.json().catch(() => ({}));
       const rows = await supabaseFind((body.q || ''), env);
       const orders = rows.map(r => ({
-        order_code: r.order_code, platform: r.platform, status_label: statusLabel(r.status),
+        order_code: r.order_code, platform: r.platform, status: r.status, status_label: statusLabel(r.status),
+        cashback: Math.round(r.cashback || 0),
         when: r.created_at ? String(r.created_at).slice(0, 10) : ''
       }));
-      return json({ orders });
+      let expected = 0, paid = 0, pending = 0;
+      rows.forEach(r => { const cb = Math.round(r.cashback || 0); if (r.status === 'cancelled') return; expected += cb; if (r.status === 'paid') paid += cb; else pending += cb; });
+      return json({ orders, summary: { expected, paid, pending } });
     }
 
     // Admin: trang + list + update trang thai (bao ve bang ADMIN_TOKEN)
@@ -1031,9 +1064,14 @@ export default {
       const body = await request.json().catch(() => ({}));
       if (!checkAdmin(body.pass, env)) return json({ error: 'unauthorized' }, 401);
       let rows = [];
-      try { const r = await fetch(env.SUPABASE_URL + '/rest/v1/submissions?select=status&limit=10000', { headers: { apikey: env.SUPABASE_SERVICE_KEY, 'Authorization': 'Bearer ' + env.SUPABASE_SERVICE_KEY } }); rows = await r.json().catch(() => []); } catch (e) { }
-      const by = {}; rows.forEach(x => { const s = x.status === 'web' ? 'notified' : x.status; by[s] = (by[s] || 0) + 1; });
-      return json({ total: rows.length, by, pending: by.confirmed || 0, paid: by.paid || 0 });
+      const hdr = { apikey: env.SUPABASE_SERVICE_KEY, 'Authorization': 'Bearer ' + env.SUPABASE_SERVICE_KEY };
+      try { let r = await fetch(env.SUPABASE_URL + '/rest/v1/submissions?select=status,cashback&limit=10000', { headers: hdr });
+        if (!r.ok) r = await fetch(env.SUPABASE_URL + '/rest/v1/submissions?select=status&limit=10000', { headers: hdr });  // fallback neu cot cashback chua tao
+        rows = await r.json().catch(() => []); } catch (e) { }
+      if (!Array.isArray(rows)) rows = [];
+      const by = {}; let cbExpected = 0, cbPaid = 0;
+      rows.forEach(x => { const s = x.status === 'web' ? 'notified' : x.status; by[s] = (by[s] || 0) + 1; const cb = Math.round(x.cashback || 0); if (s !== 'cancelled') { cbExpected += cb; if (s === 'paid') cbPaid += cb; } });
+      return json({ total: rows.length, by, pending: by.confirmed || 0, paid: by.paid || 0, cbExpected, cbPaid, cbPending: cbExpected - cbPaid });
     }
     if (request.method === 'POST' && path === '/admin-fb-post') {
       const body = await request.json().catch(() => ({}));
