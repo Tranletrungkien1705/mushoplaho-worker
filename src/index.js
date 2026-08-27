@@ -311,7 +311,16 @@ async function syncAccessTrade(env) {
       const status = a.s.indexOf(1) >= 0 ? 'confirmed' : (a.s.indexOf(0) >= 0 ? 'purchased' : 'cancelled');
       const commission = Math.round(a.com);
       const cashback = Math.round(a.com * CASHBACK_RATE);
-      if (await syncSetStatusCashback(code, status, cashback, commission, env)) updated++;
+      // Phat hien chuyen sang 'confirmed' LAN DAU -> tu nhac khach gui STK (chi push 1 lan nho check status cu)
+      let prior = null;
+      if (status === 'confirmed') { const rows = await supabaseFind(code, env); prior = (rows && rows[0]) || null; }
+      if (await syncSetStatusCashback(code, status, cashback, commission, env)) {
+        updated++;
+        if (status === 'confirmed' && prior && prior.status !== 'confirmed' && prior.status !== 'paid') {
+          const money = cashback > 0 ? ('~' + String(cashback).replace(/\B(?=(\d{3})+(?!\d))/g, '.') + 'đ') : 'tiền hoàn';
+          await notifyOrderRow(prior, '🎉 Đơn đã đối soát — tiền hoàn sắp về!', 'Đơn ' + code + ' đã được sàn đối soát. Gửi STK để shop chuyển ' + money + ' cho bạn 💸', '/track?q=' + code, env);
+        }
+      }
     }
   } catch (e) { /* ignore */ }
   return { updated, seen };
@@ -1132,21 +1141,26 @@ async function pushSubUpsert(row, env) {
   } catch (e) { /* ignore */ }
 }
 
-// Khi admin danh dau 'paid' -> day push den cac thiet bi cua khach do
-async function notifyPaid(orderCode, env) {
+// Day push den cac thiet bi cua khach so huu don (theo contact hoac dev:uid)
+async function notifyOrderRow(order, title, bodyText, urlPath, env) {
   try {
-    const rows = await supabaseFind(orderCode, env);
-    const order = rows && rows[0]; if (!order) return;
-    const contact = order.contact || '';
+    const contact = (order && order.contact) || '';
     const uid = contact.indexOf('dev:') === 0 ? contact.slice(4) : '';
     const filter = uid ? ('uid=eq.' + encodeURIComponent(uid)) : ('contact=eq.' + encodeURIComponent(contact));
     const r = await fetch(env.SUPABASE_URL + '/rest/v1/push_subs?' + filter, {
       headers: { apikey: env.SUPABASE_SERVICE_KEY, 'Authorization': 'Bearer ' + env.SUPABASE_SERVICE_KEY }
     });
     const subs = await r.json().catch(() => []);
-    const payload = JSON.stringify({ title: '💸 Tiền hoàn đã về!', body: 'Đơn ' + orderCode + ' đã được hoàn tiền — bấm để xem.', url: '/track?q=' + orderCode });
-    for (const s of subs) { if (s.sub) { try { await sendWebPush(s.sub, payload, VAPID_PUBLIC, env.VAPID_PRIVATE, env.VAPID_SUBJECT); } catch (e) { } } }
+    const payload = JSON.stringify({ title, body: (bodyText || '').slice(0, 120), url: urlPath || '/' });
+    for (const s of (Array.isArray(subs) ? subs : [])) { if (s.sub) { try { await sendWebPush(s.sub, payload, VAPID_PUBLIC, env.VAPID_PRIVATE, env.VAPID_SUBJECT); } catch (e) { } } }
   } catch (e) { /* ignore */ }
+}
+
+// Khi admin danh dau 'paid' -> day push den khach
+async function notifyPaid(orderCode, env) {
+  const rows = await supabaseFind(orderCode, env);
+  const order = rows && rows[0]; if (!order) return;
+  await notifyOrderRow(order, '💸 Tiền hoàn đã về!', 'Đơn ' + orderCode + ' đã được hoàn tiền — bấm để xem.', '/track?q=' + orderCode, env);
 }
 
 export default {
