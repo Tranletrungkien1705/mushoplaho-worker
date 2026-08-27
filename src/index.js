@@ -807,6 +807,13 @@ const TRACK_HTML = `<!doctype html>
     <div id="out" style="margin-top:8px"></div>
     <a class="link" href="/">← Về trang tạo link</a>
   </div>
+  <div class="card" id="bankcard" style="display:none">
+    <div style="font-weight:800;font-size:16px;margin-bottom:6px">💳 Số tài khoản nhận tiền hoàn</div>
+    <p class="mut" style="margin-bottom:8px">Nhập <b>STK · Ngân hàng · Tên chủ TK</b> để shop chuyển tiền hoàn theo lịch. Bạn có thể cập nhật bất cứ lúc nào.</p>
+    <input id="bank" placeholder="VD: 0123456789 · Vietcombank · NGUYEN VAN A" autocomplete="off">
+    <button class="btn" id="savebank">💾 Lưu số tài khoản</button>
+    <p class="mut" id="bankmsg" style="margin-top:8px"></p>
+  </div>
 </div>
 <script>
 var $=function(i){return document.getElementById(i)};var out=$('out');
@@ -817,6 +824,7 @@ function render(d){var rows=(d&&d.orders)||[];var sm=(d&&d.summary)||{expected:0
   var tiles='<div style="display:flex;gap:8px;margin:12px 0">'+wtile('Tổng dự kiến',sm.expected,'#FF4E73')+wtile('Đang chờ',sm.pending,'#e6a700')+wtile('Đã hoàn',sm.paid,'#039855')+'</div>';
   out.innerHTML=tiles+rows.map(function(r){return '<div class="row" style="display:flex;justify-content:space-between;gap:8px"><div><div class="st">'+(r.order_code||'(chưa có mã)')+' — '+r.status_label+'</div><div class="mut">'+(r.platform||'')+' · '+(r.when||'')+'</div></div><div style="font-weight:800;color:#FF4E73;white-space:nowrap">'+(r.cashback>0?('+'+fmt(r.cashback)):'—')+'</div></div>';}).join('')
    +'<p class="mut" style="margin-top:12px">💸 Tiền hoàn = 50% hoa hồng đơn. Chuyển ngày 20–25 hàng tháng, sau khi Shopee đối soát (~75–105 ngày).</p>';
+  var bc=document.getElementById('bankcard');if(bc){bc.style.display='block';var bi=document.getElementById('bank');if(bi&&d.bank&&!bi.value)bi.value=d.bank;}
 }
 function look(){var q=($('q').value||'').trim();if(q.length<4){out.innerHTML='<p class="mut" style="margin-top:12px">Nhập mã đơn hoặc SĐT nhé.</p>';return}
   out.innerHTML='<p class="mut" style="margin-top:12px">Đang tra...</p>';
@@ -824,6 +832,11 @@ function look(){var q=($('q').value||'').trim();if(q.length<4){out.innerHTML='<p
    .then(function(r){return r.json()}).then(function(d){render(d||{})})
    .catch(function(){out.innerHTML='<p class="mut">Lỗi, thử lại sau.</p>'});}
 $('go').addEventListener('click',look);$('q').addEventListener('keydown',function(e){if(e.key==='Enter')look()});
+var sbk=document.getElementById('savebank');if(sbk)sbk.onclick=function(){var q=($('q').value||'').trim();var bank=(document.getElementById('bank').value||'').trim();var msg=document.getElementById('bankmsg');
+  if(q.length<4){msg.textContent='Hãy tra cứu đơn của bạn trước nhé.';return}
+  if(bank.length<6){msg.textContent='Nhập đủ STK · Ngân hàng · Tên chủ TK.';return}
+  sbk.textContent='Đang lưu...';
+  fetch('/track-bank',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:q,bank_info:bank})}).then(function(r){return r.json()}).then(function(d){sbk.textContent='💾 Lưu số tài khoản';msg.textContent=d.ok?'✅ Đã lưu! Shop sẽ chuyển tiền hoàn vào STK này theo lịch 💸':('❌ '+(d.error||'Lỗi, thử lại'));}).catch(function(){sbk.textContent='💾 Lưu số tài khoản';msg.textContent='❌ Lỗi mạng, thử lại';});};
 var qs=new URLSearchParams(location.search).get('q');if(qs){$('q').value=qs;look()}
 <\/script>
 </body></html>`;
@@ -1035,6 +1048,11 @@ const ADMIN_HTML = `<!doctype html>
     <span class="mut" id="fbresult" style="margin-left:10px"></span>
     <p class="mut" style="margin-top:6px">🤖 Hệ thống <b>tự đăng 1 bài xoay vòng (15 mẫu)</b> lên Page mỗi ngày ~10h sáng. Nút xanh để đăng tay ngay.</p>
   </div>
+  <div class="card" id="testpanel">
+    <b>🧪 Kiểm thử đường tiền (cashback)</b>
+    <p class="mut" style="margin-top:4px">Tạo 1 đơn giả → đặt <b>đối soát + hoàn 50.000đ</b> → đẩy push nhắc STK → đọc lại DB. Dùng để chắc chắn ví/tiền/thông báo chạy đúng trước khi có khách thật.</p>
+    <div class="bar" style="margin-top:8px"><button class="sm" id="testmoney" style="background:#1f6feb">🧪 Chạy test đường tiền</button><button class="sm" id="testclean" style="background:#888">🧹 Xoá đơn test</button><span class="mut" id="testresult" style="margin-left:6px"></span></div>
+  </div>
 </div>
 <script>
 var $=function(i){return document.getElementById(i)};var PASS='';
@@ -1101,6 +1119,8 @@ var fbp=$('fbpost');if(fbp)fbp.onclick=function(){var img='1',rs=document.getEle
 var apb=$('autopost');if(apb)apb.onclick=function(){apb.textContent='...';$('fbresult').textContent='';fetch('/admin-autopost',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS})}).then(function(r){return r.json()}).then(function(d){apb.textContent='📅 Đăng nội dung hôm nay';$('fbresult').textContent=d.ok?('✅ Đã đăng nội dung hôm nay! id '+d.id):('❌ '+(d.error||'lỗi'))}).catch(function(){apb.textContent='📅 Đăng nội dung hôm nay';$('fbresult').textContent='❌ lỗi mạng'})};
 var dpb=$('dealpost');if(dpb)dpb.onclick=function(){dpb.textContent='...';$('fbresult').textContent='';fetch('/admin-postdeal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS})}).then(function(r){return r.json()}).then(function(d){dpb.textContent='🔥 Đăng DEAL HOT lên Page';$('fbresult').textContent=d.ok?('✅ Đã đăng deal: '+(d.product||'').slice(0,26)+'… id '+d.id+' · đẩy '+(d.pushed||0)+' push'):('❌ '+(d.error||'lỗi'))}).catch(function(){dpb.textContent='🔥 Đăng DEAL HOT lên Page';$('fbresult').textContent='❌ lỗi mạng'})};
 var pdb=$('pushdeal');if(pdb)pdb.onclick=function(){pdb.textContent='...';$('fbresult').textContent='';fetch('/admin-pushdeal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS})}).then(function(r){return r.json()}).then(function(d){pdb.textContent='🔔 Đẩy thông báo Deal';$('fbresult').textContent=d.ok?('✅ Đã đẩy '+(d.pushed||0)+' thông báo — '+(d.product||'').slice(0,26)):('❌ '+(d.error||'lỗi'))}).catch(function(){pdb.textContent='🔔 Đẩy thông báo Deal';$('fbresult').textContent='❌ lỗi mạng'})};
+var tmb=$('testmoney');if(tmb)tmb.onclick=function(){tmb.textContent='...';$('testresult').textContent='';fetch('/admin-testmoney',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS})}).then(function(r){return r.json()}).then(function(d){tmb.textContent='🧪 Chạy test đường tiền';if(d.ok&&d.saved){$('testresult').innerHTML='✅ '+d.code+' → status='+d.saved.status+', cashback='+(d.saved.cashback||0).toLocaleString('vi-VN')+'đ, commission='+(d.saved.commission||0).toLocaleString('vi-VN')+'đ · <a href="'+d.track+'" target="_blank">mở ví</a>';load(false)}else{$('testresult').textContent='❌ '+(d.error||'lỗi (đường tiền có vấn đề!)')}}).catch(function(){tmb.textContent='🧪 Chạy test đường tiền';$('testresult').textContent='❌ lỗi mạng'})};
+var tcb=$('testclean');if(tcb)tcb.onclick=function(){tcb.textContent='...';fetch('/admin-testmoney-clean',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS})}).then(function(r){return r.json()}).then(function(d){tcb.textContent='🧹 Xoá đơn test';$('testresult').textContent='🧹 Đã xoá '+(d.deleted||0)+' đơn test';load(false)}).catch(function(){tcb.textContent='🧹 Xoá đơn test'})};
 <\/script>
 </body></html>`;
 
@@ -1259,7 +1279,26 @@ export default {
       }));
       let expected = 0, paid = 0, pending = 0;
       rows.forEach(r => { const cb = Math.round(r.cashback || 0); if (r.status === 'cancelled') return; expected += cb; if (r.status === 'paid') paid += cb; else pending += cb; });
-      return json({ orders, summary: { expected, paid, pending } });
+      const bank = (rows[0] && rows[0].bank_info) || '';
+      return json({ orders, summary: { expected, paid, pending }, bank });
+    }
+
+    // Khach tu nhap STK nhan tien -> luu bank_info cho TAT CA don cua khach do
+    if (request.method === 'POST' && path === '/track-bank') {
+      const body = await request.json().catch(() => ({}));
+      const q = (body.q || '').trim();
+      const bank = (body.bank_info || '').trim().slice(0, 200);
+      if (!q || bank.length < 6) return json({ error: 'Vui lòng nhập đủ STK + Ngân hàng + Tên chủ TK' }, 400);
+      const safe = encodeURIComponent(q);
+      const filter = `or=(order_code.eq.${safe},contact.eq.${safe},buyer_psid.eq.${safe})`;
+      try {
+        const r = await fetch(env.SUPABASE_URL + '/rest/v1/submissions?' + filter, {
+          method: 'PATCH',
+          headers: { apikey: env.SUPABASE_SERVICE_KEY, 'Authorization': 'Bearer ' + env.SUPABASE_SERVICE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+          body: JSON.stringify({ bank_info: bank })
+        });
+        return json({ ok: r.ok });
+      } catch (e) { return json({ ok: false }, 500); }
     }
 
     // Admin: trang + list + update trang thai (bao ve bang ADMIN_TOKEN)
@@ -1305,6 +1344,32 @@ export default {
         supabaseCount('/rest/v1/submissions?select=id&status=in.(purchased,confirmed,paid)', env)
       ]);
       return json({ visits, clicks, links, purchased });
+    }
+    // Test end-to-end DUONG TIEN: tao don gia -> confirmed + cashback -> push nhac -> doc lai (khong dung du lieu that)
+    if (request.method === 'POST' && path === '/admin-testmoney') {
+      const body = await request.json().catch(() => ({}));
+      if (!checkAdmin(body.pass, env)) return json({ error: 'unauthorized' }, 401);
+      const code = genOrderCode();
+      const contact = 'dev:admintest';
+      await supabaseInsert({ buyer_psid: 'web', buyer_text: 'test-money', contact, order_code: code, original_url: 'https://shopee.vn/test', platform: 'shopee', affiliate_url: 'https://shopee.vn/test', status: 'purchased' }, env);
+      const cashback = 50000, commission = 100000;
+      const okPatch = await syncSetStatusCashback(code, 'confirmed', cashback, commission, env);
+      await notifyOrderRow({ contact }, '🎉 Đơn đã đối soát — tiền hoàn sắp về!', 'Đơn ' + code + ' đã được sàn đối soát. Gửi STK để shop chuyển ~50.000đ 💸', '/track?q=' + code, env);
+      const rows = await supabaseFind(code, env);
+      const r0 = (rows && rows[0]) || null;
+      return json({ ok: !!okPatch, code, track: '/track?q=' + code, saved: r0 ? { status: r0.status, cashback: r0.cashback, commission: r0.commission } : null });
+    }
+    if (request.method === 'POST' && path === '/admin-testmoney-clean') {
+      const body = await request.json().catch(() => ({}));
+      if (!checkAdmin(body.pass, env)) return json({ error: 'unauthorized' }, 401);
+      let n = 0;
+      try {
+        const r = await fetch(env.SUPABASE_URL + '/rest/v1/submissions?contact=eq.' + encodeURIComponent('dev:admintest'), {
+          method: 'DELETE', headers: { apikey: env.SUPABASE_SERVICE_KEY, 'Authorization': 'Bearer ' + env.SUPABASE_SERVICE_KEY, 'Prefer': 'return=representation' }
+        });
+        const del = await r.json().catch(() => []); n = Array.isArray(del) ? del.length : 0;
+      } catch (e) { }
+      return json({ ok: true, deleted: n });
     }
     if (request.method === 'POST' && path === '/admin-fb-post') {
       const body = await request.json().catch(() => ({}));
