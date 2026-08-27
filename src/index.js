@@ -170,10 +170,10 @@ async function dealsResponse(env, ctx) {
     });
     const j = await r.json().catch(() => ({}));
     const data = (j && j.data) || [];
-    items = data.filter(p => p && p.image && p.aff_link)
-      .map(p => ({ name: p.name, image: p.image, price: p.price, url: p.aff_link, discount_rate: Math.round(p.discount_rate || 0) }))
+    items = data.filter(p => p && p.image && p.aff_link && p.url)
+      .map(p => ({ name: p.name, image: p.image, price: p.price, ori: p.url, aff: p.aff_link, discount_rate: Math.round(p.discount_rate || 0) }))
       .sort((a, b) => (b.discount_rate || 0) - (a.discount_rate || 0))
-      .slice(0, 18);
+      .slice(0, 40);
   } catch (e) { /* ignore */ }
   const resp = new Response(JSON.stringify({ deals: items }), {
     headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=1800' }
@@ -196,6 +196,26 @@ async function supabaseInsert(row, env) {
       body: JSON.stringify(row)
     });
   } catch (e) { /* ignore */ }
+}
+
+// Ghi 1 su kien pheu (visit / buy_click). Bang: events(id, type, uid, created_at)
+async function evInsert(type, uid, env) {
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY) return;
+  try {
+    await fetch(env.SUPABASE_URL + '/rest/v1/events', {
+      method: 'POST',
+      headers: { apikey: env.SUPABASE_SERVICE_KEY, 'Authorization': 'Bearer ' + env.SUPABASE_SERVICE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ type, uid: (uid || '').slice(0, 40) })
+    });
+  } catch (e) { /* ignore */ }
+}
+
+// Dem so dong khop filter (dung count=exact header)
+async function supabaseCount(pathQuery, env) {
+  try {
+    const r = await fetch(env.SUPABASE_URL + pathQuery, { headers: { apikey: env.SUPABASE_SERVICE_KEY, 'Authorization': 'Bearer ' + env.SUPABASE_SERVICE_KEY, 'Prefer': 'count=exact', 'Range': '0-0' } });
+    const cr = r.headers.get('content-range') || ''; const m = cr.match(/\/(\d+)/); return m ? parseInt(m[1], 10) : 0;
+  } catch (e) { return 0; }
 }
 
 // Đọc đơn theo mã hoặc theo liên hệ/psid
@@ -553,6 +573,7 @@ const SHOP_HTML = `<!doctype html>
   <div class="card" id="dealcard" style="display:none">
     <h2>🔥 Deal hot hôm nay</h2>
     <div class="deals" id="deals"></div>
+    <p class="muted" id="dealmore" style="display:none;text-align:left;margin-top:8px"><a class="link" href="/deals-all">Xem tất cả deal →</a></p>
   </div>
 
   <div class="card">
@@ -660,7 +681,8 @@ function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return
 function fmt(n){n=parseInt(n,10)||0;return n.toLocaleString('vi-VN')+'đ'}
 function loadDeals(){
   fetch('/deals').then(function(r){return r.json()}).then(function(d){var a=(d&&d.deals)||[];if(!a.length)return;
-    $('deals').innerHTML=a.map(function(p){return '<a class="deal" href="'+encodeURI(p.url)+'" target="_blank" rel="noopener">'+(p.image?'<img src="'+encodeURI(p.image)+'" loading="lazy" alt="">':'')+'<div class="dbody"><div class="dname">'+esc(p.name)+'</div><div class="dprice">'+fmt(p.price)+'</div>'+(p.discount_rate>0?'<span class="ddisc">-'+p.discount_rate+'%</span>':'')+'</div></a>'}).join('');
+    $('deals').innerHTML=a.slice(0,12).map(function(p){var go='/deal-go?u='+encodeURIComponent(p.ori||p.aff||'')+'&uid='+encodeURIComponent(UID);return '<a class="deal" href="'+go+'" target="_blank" rel="noopener">'+(p.image?'<img src="'+encodeURI(p.image)+'" loading="lazy" alt="">':'')+'<div class="dbody"><div class="dname">'+esc(p.name)+'</div><div class="dprice">'+fmt(p.price)+'</div>'+(p.discount_rate>0?'<span class="ddisc">-'+p.discount_rate+'%</span>':'')+'</div></a>'}).join('');
+    var m=$('dealmore');if(m)m.style.display='block';
     $('dealcard').style.display='block';}).catch(function(){});
 }
 function tst(m){toast.textContent=m;toast.classList.add('show');setTimeout(function(){toast.classList.remove('show')},1800)}
@@ -687,6 +709,7 @@ go.addEventListener('click',function(){
 });
 $('copy').addEventListener('click',function(){var l=buy.dataset.link||buy.href;
   if(navigator.clipboard){navigator.clipboard.writeText(l).then(function(){tst('Đã sao chép link ✅')}).catch(function(){tst(l)})}else tst(l);});
+buy.addEventListener('click',function(){try{fetch('/ev',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'buy_click',uid:UID})})}catch(e){}});
 url.addEventListener('keydown',function(e){if(e.key==='Enter')contact.focus()});
 contact.addEventListener('keydown',function(e){if(e.key==='Enter')go.click()});
 var sh=$('share');
@@ -744,6 +767,7 @@ var rl=$('reflink');if(rl)rl.value=location.origin+'/?ref='+UID;
 var rcp=$('refcopy');if(rcp)rcp.onclick=function(){if(navigator.clipboard&&rl){navigator.clipboard.writeText(rl.value).then(function(){tst('Đã copy link mời ✅')}).catch(function(){tst(rl.value)})}else if(rl)tst(rl.value)};
 fetch('/ref-stats?uid='+encodeURIComponent(UID)).then(function(r){return r.json()}).then(function(d){if(d&&d.count>0)$('refcount').textContent='— đã mời '+d.count+' người 🎉'}).catch(function(){});
 loadWallet();loadDeals();
+try{if(!sessionStorage.getItem('mlh_v')){fetch('/ev',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'visit',uid:UID})});sessionStorage.setItem('mlh_v','1')}}catch(e){}
 <\/script>
 </body>
 </html>`;
@@ -886,9 +910,48 @@ const HOW_HTML = `<!doctype html>
   <a class="btn" href="/">🎁 Bắt đầu — dán link nhận hoàn tiền</a>
   <p style="text-align:center"><a class="link" href="/track">🔎 Tra cứu đơn của tôi</a></p>
 </div>
-</body></html>\`;
+</body></html>`;
 
-const ADMIN_HTML = \`<!doctype html>
+const DEALS_HTML = `<!doctype html>
+<html lang="vi"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#FF6B4A"><title>Deal hot - Mushoplaho</title>
+<style>
+  :root{--o1:#FF9F45;--o2:#FF5C7A;--bg:#fff6f1;--ink:#2b2b2b;--mut:#8a8a8a}
+  *{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink);line-height:1.5}
+  .wrap{max-width:760px;margin:0 auto;padding:0 12px 44px}
+  header{background:linear-gradient(135deg,var(--o1),var(--o2));color:#fff;text-align:center;padding:28px 16px;border-radius:0 0 26px 26px}
+  header h1{font-size:21px;font-weight:800}header .sub{opacity:.95;font-size:13px;margin-top:5px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-top:18px}
+  .deal{background:#fff;border:1px solid #ffe1d4;border-radius:14px;overflow:hidden;display:flex;flex-direction:column}
+  .deal img{width:100%;aspect-ratio:1/1;object-fit:cover;display:block;background:#f4f4f4}
+  .dbody{padding:9px}
+  .dname{font-size:12.5px;line-height:1.35;height:34px;overflow:hidden;font-weight:600}
+  .dprice{color:#FF4E73;font-weight:800;font-size:15px;margin-top:5px}
+  .ddisc{display:inline-block;background:#ffeaf0;color:#FF4E73;font-size:11px;font-weight:700;border-radius:6px;padding:1px 6px;margin-top:4px}
+  .cta{display:block;text-align:center;background:linear-gradient(135deg,#12b76a,#039855);color:#fff;font-weight:700;font-size:12.5px;padding:8px;margin:6px 9px 10px;border-radius:9px;text-decoration:none}
+  a.link{color:#FF6B3D;font-weight:700;text-decoration:none;display:inline-block;margin:14px 0}
+  .mut{color:var(--mut);font-size:13px;text-align:center;margin-top:14px}
+</style></head><body>
+<header><h1>🔥 Deal hot — Mua Là Hoàn</h1><div class="sub">Mua qua đây được hoàn 50% hoa hồng 💸</div></header>
+<div class="wrap">
+  <a class="link" href="/">← Trang chủ</a> · <a class="link" href="/how">Cách hoạt động</a>
+  <div class="grid" id="grid"><p class="mut" style="grid-column:1/-1">Đang tải deal...</p></div>
+  <p class="mut">Giá &amp; sản phẩm theo Shopee. Bấm "Mua &amp; hoàn tiền" để được ghi nhận hoàn.</p>
+</div>
+<script>
+var UID=(function(){try{var u=localStorage.getItem('mlh_uid');if(!u){u='d'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);localStorage.setItem('mlh_uid',u)}return u}catch(e){return 'd0'}})();
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function fmt(n){n=parseInt(n,10)||0;return n.toLocaleString('vi-VN')+'đ'}
+fetch('/deals').then(function(r){return r.json()}).then(function(d){var a=(d&&d.deals)||[];var g=document.getElementById('grid');
+  if(!a.length){g.innerHTML='<p class="mut" style="grid-column:1/-1">Chưa có deal, quay lại sau nhé.</p>';return}
+  g.innerHTML=a.map(function(p){var go='/deal-go?u='+encodeURIComponent(p.ori||p.aff)+'&uid='+encodeURIComponent(UID);
+    return '<div class="deal">'+(p.image?'<img src="'+encodeURI(p.image)+'" loading="lazy" alt="">':'')+'<div class="dbody"><div class="dname">'+esc(p.name)+'</div><div class="dprice">'+fmt(p.price)+'</div>'+(p.discount_rate>0?'<span class="ddisc">-'+p.discount_rate+'%</span>':'')+'</div><a class="cta" href="'+go+'" target="_blank" rel="noopener">🛒 Mua &amp; hoàn tiền</a></div>';
+  }).join('');}).catch(function(){document.getElementById('grid').innerHTML='<p class="mut" style="grid-column:1/-1">Lỗi tải deal.</p>'});
+<\/script>
+</body></html>`;
+
+const ADMIN_HTML = `<!doctype html>
 <html lang="vi"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex"><title>Admin - Mushoplaho</title>
@@ -921,6 +984,10 @@ const ADMIN_HTML = \`<!doctype html>
   <div class="card" id="dash" style="display:none">
     <b>📊 Tổng quan</b>
     <div id="stattiles" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px"></div>
+  </div>
+  <div class="card" id="funnelcard" style="display:none">
+    <b>📈 Phễu chuyển đổi</b> <span class="mut">(tỉ lệ so với bước trước)</span>
+    <div id="funneltiles" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px"></div>
   </div>
   <div class="card" id="panel" style="display:none">
     <div class="bar" style="justify-content:space-between">
@@ -969,7 +1036,7 @@ function login(){PASS=$('pass').value;$('lerr').textContent='';load(true)}
 function load(first){
   fetch('/admin-list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS})})
    .then(function(r){if(r.status===401){throw new Error('Sai mật khẩu')}return r.json()})
-   .then(function(d){$('login').style.display='none';$('dash').style.display='block';$('panel').style.display='block';$('chatpanel').style.display='block';render(d.orders||[]);loadStats();loadThreads();renderCanned();if(!window._thPoll)window._thPoll=setInterval(loadThreads,8000)})
+   .then(function(d){$('login').style.display='none';$('dash').style.display='block';$('panel').style.display='block';$('chatpanel').style.display='block';render(d.orders||[]);loadStats();loadFunnel();loadThreads();renderCanned();if(!window._thPoll)window._thPoll=setInterval(loadThreads,8000)})
    .catch(function(e){if(first)$('lerr').textContent=e.message||'Lỗi'});
 }
 function render(rows){
@@ -1010,6 +1077,11 @@ function loadStats(){fetch('/admin-stats',{method:'POST',headers:{'Content-Type'
   function money(n){return (Math.round(n||0)).toLocaleString('vi-VN')+'đ'}
   $('stattiles').innerHTML=tile('Tổng đơn',d.total||0,'#222')+tile('Chờ mua',by.notified||0,'#e6a700')+tile('Đã mua',by.purchased||0,'#12b76a')+tile('Đối soát',by.confirmed||0,'#1f6feb')+tile('Chờ hoàn',d.pending||0,'#FF4E73')+tile('Đã hoàn',d.paid||0,'#039855')
     +tile('Tiền hoàn phải trả',money(d.cbPending),'#FF4E73')+tile('Đã trả (tiền)',money(d.cbPaid),'#039855')}).catch(function(){})}
+function loadFunnel(){fetch('/admin-funnel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS})}).then(function(r){return r.json()}).then(function(d){
+  function pct(a,b){b=b||0;return b>0?Math.round((a||0)/b*100)+'%':'—'}
+  function ft(l,v,sub){return '<div style="flex:1;min-width:108px;background:#f7f9fc;border-radius:10px;padding:10px;text-align:center"><div style="font-size:22px;font-weight:800">'+(v||0)+'</div><div class="mut">'+l+'</div>'+(sub?'<div style="color:#039855;font-weight:700;font-size:12px">'+sub+'</div>':'<div style="height:16px"></div>')+'</div>'}
+  $('funneltiles').innerHTML=ft('Ghé thăm',d.visits,'')+ft('Tạo link',d.links,pct(d.links,d.visits))+ft('Bấm mua',d.clicks,pct(d.clicks,d.links))+ft('Đã mua',d.purchased,pct(d.purchased,d.clicks));
+  $('funnelcard').style.display='block';}).catch(function(){})}
 var CANNED=['Đã nhận STK, cảm ơn bạn nhé! 💸','Đơn đang đối soát Shopee (~75–105 ngày), có tiền shop chuyển ngay ạ.','Bạn gửi giúp shop: STK + Ngân hàng + Tên chủ TK nhé.','Bạn nhớ bấm link shop gửi TRƯỚC khi mua để được ghi nhận nha.'];
 function renderCanned(){var el=$('cannedchips');if(!el)return;el.innerHTML=CANNED.map(function(q,i){return '<span data-ci="'+i+'" style="background:#eef4ff;color:#1f6feb;border:1px solid #cdddff;border-radius:999px;padding:5px 10px;font-size:12px;cursor:pointer">'+esc(q.slice(0,20))+'…</span>'}).join('');Array.prototype.forEach.call(el.querySelectorAll('[data-ci]'),function(c){c.onclick=function(){$('creply').value=CANNED[+c.getAttribute('data-ci')];if(curThread)$('csend').click()}})}
 var FBSAMPLE='🔥 MẸO MUA SHOPEE ĐƯỢC HOÀN LẠI TIỀN\\n\\nMua đồ Shopee như bình thường, qua 1 bước nhỏ là được HOÀN tới 50% hoa hồng của đơn về tài khoản 💸\\n\\n👉 Dán link sản phẩm vào: mushoplaho.kientlt59.workers.dev\\nMiễn phí, không cần cài app. Ai hay mua Shopee lưu lại nhé!';
@@ -1120,6 +1192,7 @@ export default {
     if (request.method === 'GET' && path === '/shop') return html(SHOP_HTML);
     if (request.method === 'GET' && path === '/track') return html(TRACK_HTML);
     if (request.method === 'GET' && (path === '/how' || path === '/how-it-works' || path === '/an-toan')) return html(HOW_HTML);
+    if (request.method === 'GET' && (path === '/deals-all' || path === '/deal')) return html(DEALS_HTML);
 
     // Web tạo link: BẮT BUỘC contact + sinh mã đơn
     if (request.method === 'POST' && path === '/shop-convert') {
@@ -1137,6 +1210,28 @@ export default {
       if (ref && ref !== uid) row.ref_by = ref;   // ai gioi thieu don nay
       await supabaseInsert(row, env);
       return json({ buy_url: aff, order_code: code });
+    }
+
+    // Bam mua tu trang Deal -> tao ma don + affiliate co utm (track cashback) roi chuyen huong sang san
+    if (request.method === 'GET' && path === '/deal-go') {
+      const u = url.searchParams.get('u') || '';
+      const uid = (url.searchParams.get('uid') || '').trim().slice(0, 40);
+      if (!/^https?:\/\//.test(u)) return Response.redirect(url.origin, 302);
+      const code = genOrderCode();
+      const { platform, aff } = await makeAffiliate(u, env, code);
+      const contact = uid ? 'dev:' + uid : 'web';
+      ctx.waitUntil(supabaseInsert({ buyer_psid: 'web', buyer_text: 'deal', contact, order_code: code, original_url: u, platform, affiliate_url: aff, status: 'web' }, env));
+      ctx.waitUntil(evInsert('buy_click', uid, env));
+      return Response.redirect(aff, 302);
+    }
+
+    // Ghi su kien pheu (visit / buy_click)
+    if (request.method === 'POST' && path === '/ev') {
+      const body = await request.json().catch(() => ({}));
+      const type = (body.type || '').slice(0, 20);
+      if (type !== 'visit' && type !== 'buy_click') return json({ error: 'bad' }, 400);
+      ctx.waitUntil(evInsert(type, body.uid, env));
+      return json({ ok: true });
     }
 
     // Tra cứu đơn + tong tien hoan (vi cashback)
@@ -1185,6 +1280,17 @@ export default {
       const by = {}; let cbExpected = 0, cbPaid = 0;
       rows.forEach(x => { const s = x.status === 'web' ? 'notified' : x.status; by[s] = (by[s] || 0) + 1; const cb = Math.round(x.cashback || 0); if (s !== 'cancelled') { cbExpected += cb; if (s === 'paid') cbPaid += cb; } });
       return json({ total: rows.length, by, pending: by.confirmed || 0, paid: by.paid || 0, cbExpected, cbPaid, cbPending: cbExpected - cbPaid });
+    }
+    if (request.method === 'POST' && path === '/admin-funnel') {
+      const body = await request.json().catch(() => ({}));
+      if (!checkAdmin(body.pass, env)) return json({ error: 'unauthorized' }, 401);
+      const [visits, clicks, links, purchased] = await Promise.all([
+        supabaseCount('/rest/v1/events?select=id&type=eq.visit', env),
+        supabaseCount('/rest/v1/events?select=id&type=eq.buy_click', env),
+        supabaseCount('/rest/v1/submissions?select=id', env),
+        supabaseCount('/rest/v1/submissions?select=id&status=in.(purchased,confirmed,paid)', env)
+      ]);
+      return json({ visits, clicks, links, purchased });
     }
     if (request.method === 'POST' && path === '/admin-fb-post') {
       const body = await request.json().catch(() => ({}));
