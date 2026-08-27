@@ -137,8 +137,24 @@ async function postHotDeal(env) {
     const form = new URLSearchParams({ url: p.image, caption, access_token: env.FB_PAGE_POST_TOKEN });
     const fr = await fetch('https://graph.facebook.com/v19.0/1240334605834446/photos', { method: 'POST', body: form });
     const fj = await fr.json().catch(() => ({}));
-    return fj.id ? { ok: true, id: fj.id, product: p.name } : { ok: false, error: (fj.error && fj.error.message) || 'err' };
+    if (fj.id) { const pushed = await pushAllDeal(env, p); return { ok: true, id: fj.id, product: p.name, pushed }; }
+    return { ok: false, error: (fj.error && fj.error.message) || 'err' };
   } catch (e) { return { ok: false, error: String(e) }; }
+}
+
+// Day push "deal hot / flash-sale" den TAT CA nguoi da bat thong bao (nut "Bao khi tien ve")
+async function pushAllDeal(env, product) {
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY) return 0;
+  try {
+    const r = await fetch(env.SUPABASE_URL + '/rest/v1/push_subs?select=sub&limit=5000', { headers: { apikey: env.SUPABASE_SERVICE_KEY, 'Authorization': 'Bearer ' + env.SUPABASE_SERVICE_KEY } });
+    const subs = await r.json().catch(() => []);
+    const disc = Math.round((product && product.discount_rate) || 0);
+    const name = (product && product.name) ? String(product.name).slice(0, 60) : 'Deal hot hôm nay';
+    const payload = JSON.stringify({ title: '🔥 DEAL HOT — mua là hoàn 50%!', body: name + (disc > 0 ? ` (giảm ${disc}%)` : '') + ' — đặt qua Mushoplaho để được hoàn tiền 💸', url: '/' });
+    let n = 0;
+    for (const s of (Array.isArray(subs) ? subs : [])) { if (s.sub) { try { await sendWebPush(s.sub, payload, VAPID_PUBLIC, env.VAPID_PRIVATE, env.VAPID_SUBJECT); n++; } catch (e) { } } }
+    return n;
+  } catch (e) { return 0; }
 }
 
 // Deal hot: tu dong keo tu AccessTrade datafeeds (Shopee) + cache 30'
@@ -576,8 +592,9 @@ const SHOP_HTML = `<!doctype html>
   </div>
 
   <footer>
-    Mushoplaho · Mua Là Hoàn · Sản phẩm chính hãng từ Shopee<br>
-    Mọi giao dịch &amp; bảo hành theo chính sách của Shopee &amp; người bán.
+    <a class="link" href="/how" style="font-size:13px">💡 Cách hoạt động &amp; An toàn</a> · <a class="link" href="/track" style="font-size:13px">🔎 Tra cứu đơn</a><br>
+    Mushoplaho · Mua Là Hoàn · Hàng chính hãng từ Shopee &amp; TikTok Shop<br>
+    Mọi giao dịch &amp; bảo hành theo chính sách của sàn &amp; người bán. Chúng tôi không giữ thẻ/không thu tiền của bạn.
   </footer>
 </div>
 <div class="toast" id="toast"></div>
@@ -778,7 +795,100 @@ var qs=new URLSearchParams(location.search).get('q');if(qs){$('q').value=qs;look
 <\/script>
 </body></html>`;
 
-const ADMIN_HTML = `<!doctype html>
+const HOW_HTML = `<!doctype html>
+<html lang="vi"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#FF6B4A"><title>Cách hoạt động & An toàn - Mushoplaho</title>
+<meta property="og:title" content="Mushoplaho hoạt động thế nào? Có an toàn không?">
+<meta property="og:description" content="Bạn mua thẳng trên Shopee/TikTok Shop — chúng tôi KHÔNG giữ thẻ, KHÔNG thu tiền. Chỉ hoàn lại 50% hoa hồng về cho bạn.">
+<meta property="og:image" content="https://mushoplaho.kientlt59.workers.dev/og.png">
+<style>
+  :root{--o1:#FF9F45;--o2:#FF5C7A;--g1:#12b76a;--g2:#039855;--bg:#fff6f1;--ink:#2b2b2b;--mut:#7d7d7d}
+  *{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink);line-height:1.6}
+  .wrap{max-width:620px;margin:0 auto;padding:0 15px 48px}
+  header{background:linear-gradient(135deg,var(--o1),var(--o2));color:#fff;text-align:center;padding:34px 16px 28px;border-radius:0 0 30px 30px}
+  header h1{font-size:23px;font-weight:800}header .sub{opacity:.96;margin-top:6px;font-size:14px}
+  .card{background:#fff;border-radius:20px;box-shadow:0 6px 22px rgba(255,110,80,.13);padding:20px;margin-top:18px}
+  .card h2{font-size:18px;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+  .steps{list-style:none;counter-reset:s}
+  .steps li{counter-increment:s;position:relative;padding:12px 0 12px 48px;border-bottom:1px dashed #ffe3d6;font-size:15px}
+  .steps li:last-child{border:none}
+  .steps li b{color:#FF4E73}
+  .steps li::before{content:counter(s);position:absolute;left:0;top:11px;width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--o1),var(--o2));color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center}
+  .safe{background:#eafff3;border:1px solid #b7f0cf}
+  .safe li{list-style:none;padding:8px 0;font-size:15px;display:flex;gap:10px;align-items:flex-start}
+  .safe li .ic{font-size:18px}
+  .tl{list-style:none;margin-top:4px}
+  .tl li{position:relative;padding:0 0 16px 26px;border-left:2px solid #ffd9c9;margin-left:6px;font-size:14px}
+  .tl li:last-child{border-left-color:transparent;padding-bottom:0}
+  .tl li::before{content:'';position:absolute;left:-8px;top:3px;width:14px;height:14px;border-radius:50%;background:linear-gradient(135deg,var(--o1),var(--o2))}
+  .tl b{color:#FF4E73}
+  .faq details{border-bottom:1px solid #ffe3d6;padding:12px 0}.faq details:last-child{border:none}
+  .faq summary{font-weight:700;cursor:pointer;list-style:none;display:flex;justify-content:space-between;gap:10px}
+  .faq summary::-webkit-details-marker{display:none}.faq summary::after{content:'+';color:var(--o2);font-weight:800}
+  .faq details[open] summary::after{content:'\\2212'}.faq p{color:#555;font-size:14px;margin-top:8px}
+  .btn{display:block;width:100%;text-align:center;border:none;cursor:pointer;font-size:17px;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--o1),var(--o2));padding:15px;border-radius:14px;margin-top:14px;text-decoration:none}
+  a.link{color:#FF6B3D;font-weight:700;text-decoration:none;display:inline-block;margin-top:14px}
+  .mut{color:var(--mut);font-size:13px}
+  .trust{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:14px}
+  .trust span{background:#fff;border:1px solid #ffe1d4;border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700;color:#FF6B3D}
+</style></head><body>
+<header>
+  <h1>Mushoplaho hoạt động thế nào?</h1>
+  <div class="sub">Minh bạch — an toàn — miễn phí 💸</div>
+</header>
+<div class="wrap">
+  <div class="card">
+    <h2>🛒 3 bước để được hoàn tiền</h2>
+    <ol class="steps">
+      <li><b>Dán link</b> sản phẩm Shopee hoặc TikTok Shop vào Mushoplaho → nhận <b>link hoàn tiền</b> + <b>mã đơn</b>.</li>
+      <li><b>Bấm link đó</b> → mua như bình thường, thanh toán ngay trong phiên (giá & hàng y hệt trên sàn).</li>
+      <li>Sau khi sàn đối soát, <b>50% hoa hồng</b> của đơn được <b>hoàn về tài khoản bạn</b>.</li>
+    </ol>
+  </div>
+
+  <div class="card safe">
+    <h2>🔒 An toàn & riêng tư</h2>
+    <ul>
+      <li><span class="ic">✅</span><div>Bạn mua <b>thẳng trên Shopee / TikTok Shop</b> — sản phẩm, giá, bảo hành, đổi trả đều theo chính sách của sàn & người bán.</div></li>
+      <li><span class="ic">🚫</span><div>Mushoplaho <b>KHÔNG giữ thẻ, KHÔNG thu tiền, KHÔNG yêu cầu mật khẩu</b> của bạn. Bạn thanh toán trực tiếp cho sàn.</div></li>
+      <li><span class="ic">🧾</span><div>Mỗi đơn có <b>mã riêng (MLH-…)</b> để bạn <b>tra cứu tiền hoàn minh bạch</b> bất cứ lúc nào.</div></li>
+      <li><span class="ic">🆓</span><div><b>Miễn phí 100%</b> — không cài app, không đăng ký tài khoản, không phí ẩn.</div></li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>💰 Tiền hoàn từ đâu ra?</h2>
+    <p style="font-size:15px">Khi bạn mua qua link tiếp thị liên kết, <b>sàn trả hoa hồng</b> cho người giới thiệu. Mushoplaho <b>chia lại 50% khoản hoa hồng đó cho chính bạn</b> — nên bạn mua đúng giá mà vẫn được nhận tiền về. Đôi bên cùng có lợi 🤝</p>
+    <p class="mut" style="margin-top:8px">Vì thế: <b>bắt buộc bấm link Mushoplaho gửi TRƯỚC khi mua</b> — mua không qua link thì sàn không ghi nhận, sẽ không có tiền hoàn.</p>
+  </div>
+
+  <div class="card">
+    <h2>💸 Lịch nhận tiền hoàn</h2>
+    <ul class="tl">
+      <li><b>Ngày 18</b> — chốt báo cáo & xin số tài khoản (nếu lần đầu)</li>
+      <li><b>Ngày 20–25</b> — chuyển tiền hoàn vào tài khoản của bạn</li>
+      <li><b>Ngày 26</b> — thông báo hoàn tất</li>
+      <li>Đơn được hoàn <b>sau khi sàn đối soát</b> (~75–105 ngày) để tránh đơn huỷ/hoàn hàng.</li>
+    </ul>
+  </div>
+
+  <div class="card faq">
+    <h2>❓ Câu hỏi thường gặp</h2>
+    <details><summary>Có phải trả thêm phí gì không?</summary><p>Không. Bạn mua đúng giá trên sàn, Mushoplaho chỉ hoàn lại % tiền cho bạn — hoàn toàn miễn phí.</p></details>
+    <details><summary>Hàng có chính hãng, có bảo hành không?</summary><p>Có. Bạn mua trực tiếp trên Shopee/TikTok Shop nên sản phẩm, bảo hành, đổi trả đều theo sàn & người bán.</p></details>
+    <details><summary>Vì sao phải bấm link trước khi mua?</summary><p>Link đó giúp sàn ghi nhận đơn để tính hoa hồng. Mua không qua link sẽ không được hoàn.</p></details>
+    <details><summary>Làm sao biết mình được bao nhiêu tiền hoàn?</summary><p>Mỗi đơn có mã MLH-… — vào mục tra cứu để xem tiền hoàn (đang chờ / đã hoàn) minh bạch theo thời gian thực.</p></details>
+    <details><summary>Nhận tiền hoàn bằng cách nào?</summary><p>Bạn gửi số tài khoản ngân hàng (hoặc nick Zalo) cho shop; shop chuyển tiền theo lịch ngày 20–25 hàng tháng.</p></details>
+  </div>
+
+  <div class="trust"><span>✅ Chính hãng</span><span>🔒 Không giữ thẻ</span><span>🆓 Miễn phí</span><span>🧾 Tra cứu minh bạch</span></div>
+  <a class="btn" href="/">🎁 Bắt đầu — dán link nhận hoàn tiền</a>
+  <p style="text-align:center"><a class="link" href="/track">🔎 Tra cứu đơn của tôi</a></p>
+</div>
+</body></html>\`;
+
+const ADMIN_HTML = \`<!doctype html>
 <html lang="vi"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex"><title>Admin - Mushoplaho</title>
@@ -845,6 +955,7 @@ const ADMIN_HTML = `<!doctype html>
     <button class="sm" id="fbpost" style="margin-top:8px">📤 Đăng bài này lên Page</button>
     <button class="sm" id="autopost" style="margin-top:8px;background:#039855">📅 Đăng nội dung hôm nay</button>
     <button class="sm" id="dealpost" style="margin-top:8px;background:#FF4E73">🔥 Đăng DEAL HOT lên Page</button>
+    <button class="sm" id="pushdeal" style="margin-top:8px;background:#1f6feb">🔔 Đẩy thông báo Deal</button>
     <span class="mut" id="fbresult" style="margin-left:10px"></span>
     <p class="mut" style="margin-top:6px">🤖 Hệ thống <b>tự đăng 1 bài xoay vòng (15 mẫu)</b> lên Page mỗi ngày ~10h sáng. Nút xanh để đăng tay ngay.</p>
   </div>
@@ -907,7 +1018,8 @@ var fbp=$('fbpost');if(fbp)fbp.onclick=function(){var img='1',rs=document.getEle
   fbp.textContent='Đang đăng...';$('fbresult').textContent='';
   fetch('/admin-fb-post',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS,message:$('fbmsg').value,img:img})}).then(function(r){return r.json()}).then(function(d){fbp.textContent='📤 Đăng bài này lên Page';$('fbresult').textContent=d.ok?('✅ Đã đăng! id '+d.id):('❌ '+(d.error||'lỗi'))}).catch(function(){fbp.textContent='📤 Đăng bài này lên Page';$('fbresult').textContent='❌ lỗi mạng'})};
 var apb=$('autopost');if(apb)apb.onclick=function(){apb.textContent='...';$('fbresult').textContent='';fetch('/admin-autopost',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS})}).then(function(r){return r.json()}).then(function(d){apb.textContent='📅 Đăng nội dung hôm nay';$('fbresult').textContent=d.ok?('✅ Đã đăng nội dung hôm nay! id '+d.id):('❌ '+(d.error||'lỗi'))}).catch(function(){apb.textContent='📅 Đăng nội dung hôm nay';$('fbresult').textContent='❌ lỗi mạng'})};
-var dpb=$('dealpost');if(dpb)dpb.onclick=function(){dpb.textContent='...';$('fbresult').textContent='';fetch('/admin-postdeal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS})}).then(function(r){return r.json()}).then(function(d){dpb.textContent='🔥 Đăng DEAL HOT lên Page';$('fbresult').textContent=d.ok?('✅ Đã đăng deal: '+(d.product||'').slice(0,30)+'... id '+d.id):('❌ '+(d.error||'lỗi'))}).catch(function(){dpb.textContent='🔥 Đăng DEAL HOT lên Page';$('fbresult').textContent='❌ lỗi mạng'})};
+var dpb=$('dealpost');if(dpb)dpb.onclick=function(){dpb.textContent='...';$('fbresult').textContent='';fetch('/admin-postdeal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS})}).then(function(r){return r.json()}).then(function(d){dpb.textContent='🔥 Đăng DEAL HOT lên Page';$('fbresult').textContent=d.ok?('✅ Đã đăng deal: '+(d.product||'').slice(0,26)+'… id '+d.id+' · đẩy '+(d.pushed||0)+' push'):('❌ '+(d.error||'lỗi'))}).catch(function(){dpb.textContent='🔥 Đăng DEAL HOT lên Page';$('fbresult').textContent='❌ lỗi mạng'})};
+var pdb=$('pushdeal');if(pdb)pdb.onclick=function(){pdb.textContent='...';$('fbresult').textContent='';fetch('/admin-pushdeal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS})}).then(function(r){return r.json()}).then(function(d){pdb.textContent='🔔 Đẩy thông báo Deal';$('fbresult').textContent=d.ok?('✅ Đã đẩy '+(d.pushed||0)+' thông báo — '+(d.product||'').slice(0,26)):('❌ '+(d.error||'lỗi'))}).catch(function(){pdb.textContent='🔔 Đẩy thông báo Deal';$('fbresult').textContent='❌ lỗi mạng'})};
 <\/script>
 </body></html>`;
 
@@ -1007,6 +1119,7 @@ export default {
 
     if (request.method === 'GET' && path === '/shop') return html(SHOP_HTML);
     if (request.method === 'GET' && path === '/track') return html(TRACK_HTML);
+    if (request.method === 'GET' && (path === '/how' || path === '/how-it-works' || path === '/an-toan')) return html(HOW_HTML);
 
     // Web tạo link: BẮT BUỘC contact + sinh mã đơn
     if (request.method === 'POST' && path === '/shop-convert') {
@@ -1098,6 +1211,21 @@ export default {
       const body = await request.json().catch(() => ({}));
       if (!checkAdmin(body.pass, env)) return json({ error: 'unauthorized' }, 401);
       return json(await postHotDeal(env));
+    }
+    // Chi DAY PUSH deal (khong dang Page) - dung khi flash-sale, bao nhanh nguoi da bat thong bao
+    if (request.method === 'POST' && path === '/admin-pushdeal') {
+      const body = await request.json().catch(() => ({}));
+      if (!checkAdmin(body.pass, env)) return json({ error: 'unauthorized' }, 401);
+      let product = null;
+      try {
+        const r = await fetch('https://api.accesstrade.vn/v1/datafeeds?merchant=shopee&limit=50', { headers: { 'Authorization': 'Token ' + (env.ACCESSTRADE_TOKEN || '') } });
+        const j = await r.json().catch(() => ({}));
+        let items = ((j && j.data) || []).filter(p => p && p.name);
+        items.sort((a, b) => (b.discount_rate || 0) - (a.discount_rate || 0));
+        product = items[0] || null;
+      } catch (e) { }
+      const pushed = await pushAllDeal(env, product);
+      return json({ ok: true, pushed, product: product ? product.name : '' });
     }
 
     // PWA: manifest, service worker, icons, push subscribe
