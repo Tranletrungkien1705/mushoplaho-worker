@@ -1414,6 +1414,12 @@ export default {
     }
 
     // PWA: manifest, service worker, icons, push subscribe
+    if (request.method === 'GET' && path === '/robots.txt') return new Response('User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /webhook\nSitemap: https://mushoplaho.kientlt59.workers.dev/sitemap.xml\n', { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=86400' } });
+    if (request.method === 'GET' && path === '/sitemap.xml') {
+      const urls = ['/', '/how', '/deals-all', '/track'];
+      const body = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + urls.map(u => '<url><loc>https://mushoplaho.kientlt59.workers.dev' + u + '</loc><changefreq>daily</changefreq></url>').join('') + '</urlset>';
+      return new Response(body, { headers: { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400' } });
+    }
     if (request.method === 'GET' && path === '/manifest.json') return new Response(MANIFEST, { headers: { 'Content-Type': 'application/manifest+json', 'Cache-Control': 'public, max-age=3600' } });
     if (request.method === 'GET' && path === '/sw.js') return new Response(SW_JS, { headers: { 'Content-Type': 'application/javascript', 'Cache-Control': 'no-cache', 'Service-Worker-Allowed': '/' } });
     if (request.method === 'GET' && path === '/icon-192.png') return iconResponse(ICON192);
