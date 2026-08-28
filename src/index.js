@@ -61,13 +61,45 @@ function genOrderCode() {
   return 'MLH-' + a + b;
 }
 
+// Lay product_id tu link TikTok Shop (bat buoc cho endpoint product_feeds)
+function extractTiktokPid(u) {
+  const s = String(u || '');
+  const m = s.match(/product\/(\d{6,})/i) || s.match(/[?&]product_id=(\d{6,})/i) || s.match(/\/(\d{12,})(?:[/?]|$)/);
+  return m ? m[1] : '';
+}
+
+// TikTok Shop: PHAI dung endpoint tiktokshop_product_feeds/create_link (link product-feeds MOI duoc ghi nhan hoa hong).
+// Endpoint product_link/create generic tao link co sub5=pub-api -> campaign KHONG tinh tien.
+async function makeTiktokAff(url, env, utmContent) {
+  let full = url, pid = extractTiktokPid(url);
+  if (!pid && /vt\.tiktok|tiktok\.com\/t\//i.test(url)) {   // link rut gon -> resolve redirect lay product_id
+    try { const rr = await fetch(url, { redirect: 'follow' }); full = rr.url || url; pid = extractTiktokPid(full); } catch (e) { }
+  }
+  if (!pid) return url;   // khong lay duoc product_id -> tra link goc (khong cashback, khong crash)
+  try {
+    const body = { product_url: full, product_id: pid };
+    if (utmContent) body.utm_content = utmContent;
+    const r = await fetch('https://api.accesstrade.vn/v1/tiktokshop_product_feeds/create_link', {
+      method: 'POST',
+      headers: { 'Authorization': 'Token ' + env.ACCESSTRADE_TOKEN, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const txt = await r.text();
+    let j = {}; try { j = JSON.parse(txt); } catch (e) { }
+    if (j && j.status && j.data) return j.data.aff_short_url || j.data.aff_url || url;
+  } catch (e) { /* fallback link goc */ }
+  return url;
+}
+
 async function makeAffiliate(url, env, utmContent) {
   const platform = detectPlatform(url);
   const TOKEN = env.ACCESSTRADE_TOKEN || '';
-  const CAMP = { shopee: env.AT_CAMPAIGN_SHOPEE || '', tiktok: env.AT_CAMPAIGN_TIKTOK || '', lazada: env.AT_CAMPAIGN_LAZADA || '' };
-  const cid = CAMP[platform];
+  if (!TOKEN || !/^https?:/.test(url)) return { platform, aff: url };
+  if (platform === 'tiktok') return { platform, aff: await makeTiktokAff(url, env, utmContent) };
+  // Shopee (va default) / Lazada: endpoint generic product_link/create
+  const cid = platform === 'lazada' ? (env.AT_CAMPAIGN_LAZADA || '') : (env.AT_CAMPAIGN_SHOPEE || '');
   let aff = url;
-  if (TOKEN && cid && /^https?:/.test(url)) {
+  if (cid) {
     try {
       const payload = { campaign_id: cid, urls: [url] };
       if (utmContent) payload.utm_content = utmContent;   // nhet ma don -> khop lai o /v1/transactions
