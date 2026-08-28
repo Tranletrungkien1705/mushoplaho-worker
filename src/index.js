@@ -72,8 +72,15 @@ function extractTiktokPid(u) {
 // Endpoint product_link/create generic tao link co sub5=pub-api -> campaign KHONG tinh tien.
 async function makeTiktokAff(url, env, utmContent) {
   let full = url, pid = extractTiktokPid(url);
-  if (!pid && /vt\.tiktok|tiktok\.com\/t\//i.test(url)) {   // link rut gon -> resolve redirect lay product_id
-    try { const rr = await fetch(url, { redirect: 'follow' }); full = rr.url || url; pid = extractTiktokPid(full); } catch (e) { }
+  if (!pid && /vt\.tiktok|vm\.tiktok|tiktok\.com\/t\//i.test(url)) {   // link rut gon -> follow redirect THU CONG lay product_id
+    const UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1';
+    let cur = url;
+    for (let i = 0; i < 5 && !pid; i++) {
+      let r; try { r = await fetch(cur, { redirect: 'manual', headers: { 'User-Agent': UA } }); } catch (e) { break; }
+      const loc = r.headers.get('location');
+      if (loc) { cur = loc.indexOf('http') === 0 ? loc : new URL(loc, cur).toString(); pid = extractTiktokPid(cur); full = cur; }
+      else { if (r.url && extractTiktokPid(r.url)) { full = r.url; pid = extractTiktokPid(r.url); } break; }
+    }
   }
   if (!pid) return url;   // khong lay duoc product_id -> tra link goc (khong cashback, khong crash)
   try {
@@ -612,7 +619,7 @@ const SHOP_HTML = `<!doctype html>
 <header>
   <div class="logo">M</div>
   <h1>Mushoplaho</h1>
-  <div class="sub"><b>Mua Shopee &amp; TikTok — nhận lại 50% hoa hồng</b><br>Mua 1 triệu ↦ hoàn ~20–30.000đ · Miễn phí · Không cài app</div>
+  <div class="sub"><b>Mua Shopee &amp; TikTok — nhận lại 50% hoa hồng</b><br>Đơn 1 triệu hoàn ~15.000đ (Shopee) → ~100.000đ (TikTok) · tùy sản phẩm · Miễn phí</div>
   <div class="hero-box">
     <div class="flabel">① Dán link sản phẩm <span class="req">BẮT BUỘC</span></div>
     <div class="inrow">
