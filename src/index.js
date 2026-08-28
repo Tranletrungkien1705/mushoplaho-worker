@@ -480,7 +480,7 @@ const SHOP_HTML = `<!doctype html>
   :root{--o1:#FF9F45;--o2:#FF5C7A;--g1:#12b76a;--g2:#039855;--bg:#fff6f1;--ink:#2b2b2b;--mut:#8a8a8a}
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
   body{font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink);line-height:1.5}
-  .wrap{max-width:600px;margin:0 auto;padding:0 15px 40px}
+  .wrap{max-width:600px;margin:0 auto;padding:0 15px 96px}
   header{background:linear-gradient(135deg,var(--o1),var(--o2));color:#fff;text-align:center;padding:36px 16px 30px;border-radius:0 0 30px 30px}
   .logo{width:72px;height:72px;border-radius:20px;background:rgba(255,255,255,.18);border:3px solid rgba(255,255,255,.9);
     display:flex;align-items:center;justify-content:center;font-size:42px;font-weight:800;margin:0 auto 10px}
@@ -560,22 +560,37 @@ const SHOP_HTML = `<!doctype html>
   .msg.shop{background:#f1f3f7;color:#222;margin-right:auto;border-bottom-left-radius:4px}
   .msg .t{display:block;font-size:10px;opacity:.7;margin-top:2px}
   .qchip{background:#fff3ec;color:#FF6B3D;border:1px solid #ffd9c9;border-radius:999px;padding:6px 12px;font-size:13px;font-weight:600;cursor:pointer}
+  /* CRO: CTA chinh mau XANH tuong phan vs header cam (tang tach biet thi giac) */
+  #go{background:linear-gradient(135deg,#12b76a,#00a15a);box-shadow:0 8px 22px rgba(3,152,85,.42);font-size:18px;padding:16px;min-height:54px}
+  .flabel{font-size:13px;font-weight:800;color:#fff;margin:0 0 7px;display:flex;align-items:center;gap:7px}
+  .req{background:#fff;color:#FF4E73;border-radius:6px;font-size:11px;padding:2px 8px;font-weight:800}
+  .hero-box input#url{border:2px solid #ffd9c9;font-weight:600}
+  .hero-box input#url:focus{border-color:#12b76a;box-shadow:0 0 0 4px rgba(18,183,106,.16)}
+  .trow{display:flex;gap:7px;justify-content:center;flex-wrap:wrap;margin-top:13px}
+  .trow span{background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.4);color:#fff;border-radius:999px;padding:6px 12px;font-size:12.5px;font-weight:700}
+  .optbox{margin-top:12px;padding-top:12px;border-top:1px dashed #ffe3d6;text-align:left}
+  .optbox .lb{font-size:13px;font-weight:700;margin-bottom:6px}
+  .optbox .lb i{color:var(--mut);font-weight:400;font-style:normal}
+  .sticky{position:fixed;left:0;right:0;bottom:0;z-index:18;background:#fff;box-shadow:0 -4px 18px rgba(0,0,0,.13);padding:10px 14px calc(10px + env(safe-area-inset-bottom));transform:translateY(130%);transition:transform .25s;max-width:600px;margin:0 auto}
+  .sticky.show{transform:translateY(0)}
+  .sticky button{width:100%;border:none;cursor:pointer;font-size:17px;font-weight:800;color:#fff;background:linear-gradient(135deg,#12b76a,#00a15a);padding:15px;border-radius:14px;box-shadow:0 6px 16px rgba(3,152,85,.3)}
 </style>
 </head>
 <body>
 <header>
   <div class="logo">M</div>
   <h1>Mushoplaho</h1>
-  <div class="sub">Dán link Shopee — nhận lại đến <b>50%</b> 💸</div>
+  <div class="sub"><b>Mua Shopee &amp; TikTok — nhận lại 50% hoa hồng</b><br>Mua 1 triệu ↦ hoàn ~20–30.000đ · Miễn phí · Không cài app</div>
   <div class="hero-box">
+    <div class="flabel">① Dán link sản phẩm <span class="req">BẮT BUỘC</span></div>
     <div class="inrow">
-      <input id="url" type="url" inputmode="url" placeholder="Dán link Shopee / TikTok Shop..." autocomplete="off">
+      <input id="url" type="url" inputmode="url" placeholder="Dán link Shopee / TikTok Shop vào đây..." autocomplete="off">
       <button class="paste" id="paste" type="button">📋 Dán</button>
     </div>
-    <button class="btn" id="go">🎁 Nhận link hoàn tiền ngay</button>
+    <button class="btn" id="go">🎁 Nhận tiền hoàn ngay →</button>
     <div id="err"></div>
   </div>
-  <div class="proof" id="proof">🔥 Đang tải...</div>
+  <div class="trow"><span>🔒 An toàn</span><span>🆓 Miễn phí</span><span id="proof">🔥 Đang tải...</span></div>
 </header>
 
 <div class="wrap">
@@ -585,20 +600,22 @@ const SHOP_HTML = `<!doctype html>
     <p class="muted" id="dealmore" style="display:none;text-align:left;margin-top:8px"><a class="link" href="/deals-all">Xem tất cả deal →</a></p>
   </div>
 
-  <div class="card">
-    <input id="contact" type="text" placeholder="SĐT/Zalo (không bắt buộc — để được nhắc khi tiền về)" autocomplete="off">
+  <div class="card" id="convcard">
     <div id="err2" style="display:none"></div>
     <div id="result">
       <div class="ok">
-        <p style="font-weight:800;margin-bottom:6px">🎁 Link của bạn đã sẵn sàng!</p>
-        <p class="muted" style="margin:0 0 10px">🧾 Mã đơn: <span class="code" id="ocode"></span> — lưu lại để tra cứu</p>
-        <a class="btn buy" id="buy" target="_blank" rel="noopener">🛒 Mở Shopee &amp; mua ngay</a>
+        <p style="font-weight:800;margin-bottom:6px">🎉 Xong! Link hoàn tiền đã sẵn sàng</p>
+        <p class="muted" style="margin:0 0 10px">🧾 Mã đơn: <span class="code" id="ocode"></span> — lưu để tra cứu tiền hoàn</p>
+        <a class="btn buy" id="buy" target="_blank" rel="noopener">🛒 Mở &amp; mua ngay để nhận hoàn</a>
         <button class="btn ghost" id="copy" type="button">📄 Sao chép link</button>
-        <p class="muted">Bấm nút mở thẳng Shopee. Mua như bình thường để được hoàn 50% nhé!</p>
-        <p class="muted"><a class="link" href="/track" id="tolink">🔎 Tra cứu đơn của tôi</a></p>
+        <div class="optbox">
+          <div class="lb">📱 Nhận nhắc khi tiền về <i>(không bắt buộc)</i></div>
+          <input id="contact" type="text" placeholder="SĐT / Zalo của bạn..." autocomplete="off" style="margin-top:0">
+          <span class="muted" id="csaved" style="display:none">✅ Đã lưu</span>
+        </div>
+        <p class="muted" style="margin-top:10px"><a class="link" href="/track" id="tolink">🔎 Tra cứu đơn của tôi</a></p>
       </div>
     </div>
-    <div class="trust"><span>✅ Chính hãng Shopee</span><span>🔒 An toàn</span><span>🆓 Miễn phí</span><span>📱 Không cần cài app</span></div>
   </div>
 
   <div class="card" id="wallet" style="display:none">
@@ -628,6 +645,7 @@ const SHOP_HTML = `<!doctype html>
   </footer>
 </div>
 <div class="toast" id="toast"></div>
+<div class="sticky" id="stickycta"><button id="stickygo">🎁 Nhận tiền hoàn ngay →</button></div>
 
 <div class="fab" id="fab" title="Chat với shop">💬</div>
 <div class="sheet-bg" id="chatbg"></div>
@@ -709,7 +727,7 @@ go.addEventListener('click',function(){
   fetch(API+'shop-convert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:u,contact:c,uid:UID,ref:refv})})
    .then(function(r){return r.json()})
    .then(function(d){go.textContent=old;go.disabled=false;
-     if(d&&d.buy_url){buy.href=d.buy_url;buy.dataset.link=d.buy_url;$('ocode').textContent=d.order_code||'';
+     if(d&&d.buy_url){buy.href=d.buy_url;buy.dataset.link=d.buy_url;$('ocode').textContent=d.order_code||'';window._lastCode=d.order_code||'';
        if(d.order_code)$('tolink').href='/track?q='+encodeURIComponent(d.order_code);
        if(c)try{localStorage.setItem('mlh_contact',c)}catch(e){}
        res.style.display='block';res.scrollIntoView({behavior:'smooth',block:'center'});setTimeout(loadWallet,1000)}
@@ -719,8 +737,8 @@ go.addEventListener('click',function(){
 $('copy').addEventListener('click',function(){var l=buy.dataset.link||buy.href;
   if(navigator.clipboard){navigator.clipboard.writeText(l).then(function(){tst('Đã sao chép link ✅')}).catch(function(){tst(l)})}else tst(l);});
 buy.addEventListener('click',function(){try{fetch('/ev',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'buy_click',uid:UID})})}catch(e){}});
-url.addEventListener('keydown',function(e){if(e.key==='Enter')contact.focus()});
-contact.addEventListener('keydown',function(e){if(e.key==='Enter')go.click()});
+url.addEventListener('keydown',function(e){if(e.key==='Enter')go.click()});
+if(contact)contact.addEventListener('keydown',function(e){if(e.key==='Enter')contact.blur()});
 var sh=$('share');
 if(sh)sh.addEventListener('click',function(){var u=location.origin;
   if(navigator.share){navigator.share({title:'Mushoplaho — Mua Là Hoàn',text:'Mua Shopee nhận lại tiền!',url:u}).catch(function(){})}
@@ -775,6 +793,12 @@ window.addEventListener('focus',tryClip);setTimeout(tryClip,400);
 var rl=$('reflink');if(rl)rl.value=location.origin+'/?ref='+UID;
 var rcp=$('refcopy');if(rcp)rcp.onclick=function(){if(navigator.clipboard&&rl){navigator.clipboard.writeText(rl.value).then(function(){tst('Đã copy link mời ✅')}).catch(function(){tst(rl.value)})}else if(rl)tst(rl.value)};
 fetch('/ref-stats?uid='+encodeURIComponent(UID)).then(function(r){return r.json()}).then(function(d){if(d&&d.count>0)$('refcount').textContent='— đã mời '+d.count+' người 🎉'}).catch(function(){});
+if(contact)contact.addEventListener('change',function(){var v=(contact.value||'').trim();if(v.length<4)return;try{localStorage.setItem('mlh_contact',v)}catch(e){}
+  if(window._lastCode)fetch('/order-contact',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({order_code:window._lastCode,contact:v})}).then(function(){var cs=$('csaved');if(cs)cs.style.display='inline'}).catch(function(){});});
+var scta=$('stickycta'),sgo=$('stickygo'),herob=document.querySelector('.hero-box');
+function stickyChk(){if(!scta||!herob)return;var show=herob.getBoundingClientRect().bottom<8;scta.classList.toggle('show',show);var f=$('fab');if(f)f.style.bottom=show?'86px':'20px';}
+window.addEventListener('scroll',stickyChk,{passive:true});setTimeout(stickyChk,400);
+if(sgo)sgo.onclick=function(){var u=(url.value||'').trim();if(/^https?:\\/\\//.test(u)){window.scrollTo({top:0,behavior:'smooth'});go.click();}else{window.scrollTo({top:0,behavior:'smooth'});setTimeout(function(){url.focus()},350);tst('Dán link sản phẩm vào ô nhé 👆');}};
 loadWallet();loadDeals();
 try{if(!sessionStorage.getItem('mlh_v')){fetch('/ev',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'visit',uid:UID})});sessionStorage.setItem('mlh_v','1')}}catch(e){}
 <\/script>
@@ -1281,6 +1305,20 @@ export default {
       rows.forEach(r => { const cb = Math.round(r.cashback || 0); if (r.status === 'cancelled') return; expected += cb; if (r.status === 'paid') paid += cb; else pending += cb; });
       const bank = (rows[0] && rows[0].bank_info) || '';
       return json({ orders, summary: { expected, paid, pending }, bank });
+    }
+
+    // Khach nhap SDT/Zalo SAU khi tao link -> gan contact cho don do
+    if (request.method === 'POST' && path === '/order-contact') {
+      const body = await request.json().catch(() => ({}));
+      const code = (body.order_code || '').trim();
+      const contact = (body.contact || '').trim().slice(0, 80);
+      if (!code || contact.length < 4) return json({ error: 'bad' }, 400);
+      try {
+        const r = await fetch(env.SUPABASE_URL + '/rest/v1/submissions?order_code=eq.' + encodeURIComponent(code), {
+          method: 'PATCH', headers: { apikey: env.SUPABASE_SERVICE_KEY, 'Authorization': 'Bearer ' + env.SUPABASE_SERVICE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' }, body: JSON.stringify({ contact })
+        });
+        return json({ ok: r.ok });
+      } catch (e) { return json({ ok: false }, 500); }
     }
 
     // Khach tu nhap STK nhan tien -> luu bank_info cho TAT CA don cua khach do
