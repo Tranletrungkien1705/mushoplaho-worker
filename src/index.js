@@ -305,7 +305,9 @@ async function syncSetStatusCashback(orderCode, status, cashback, commission, en
   const patch = { status };
   if (cashback != null && !isNaN(cashback)) patch.cashback = cashback;
   if (commission != null && !isNaN(commission)) patch.commission = commission;
-  const url = env.SUPABASE_URL + `/rest/v1/submissions?order_code=eq.${encodeURIComponent(orderCode)}&status=neq.paid`;
+  // 'settled' (AT da doi soat) duoc nang tu confirmed; nhung KHONG status nao duoc HA CAP 'settled'/'paid'
+  const guard = status === 'settled' ? 'status=neq.paid' : 'status=not.in.(paid,settled)';
+  const url = env.SUPABASE_URL + `/rest/v1/submissions?order_code=eq.${encodeURIComponent(orderCode)}&${guard}`;
   const hdr = { apikey: env.SUPABASE_SERVICE_KEY, 'Authorization': 'Bearer ' + env.SUPABASE_SERVICE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' };
   try {
     let r = await fetch(url, { method: 'PATCH', headers: hdr, body: JSON.stringify(patch) });
@@ -341,21 +343,28 @@ async function syncAccessTrade(env) {
       seen++;
       // ten field hoa hong publisher co the khac tuy version -> thu nhieu ten
       const com = parseFloat(t.pub_commission != null ? t.pub_commission : (t.commission != null ? t.commission : (t.pub_commission_amount != null ? t.pub_commission_amount : 0))) || 0;
-      if (!agg[code]) agg[code] = { s: [], com: 0 };
+      if (!agg[code]) agg[code] = { s: [], com: 0, conf: false };
       agg[code].s.push(t.status);
+      if (t.is_confirmed === 1 || t.is_confirmed === '1' || t.confirmed_time) agg[code].conf = true;   // AT da DOI SOAT (an toan tra)
       if (t.status !== 2) agg[code].com += com;   // don huy khong tinh tien
     }
     for (const code of Object.keys(agg)) {
       const a = agg[code];
-      const status = a.s.indexOf(1) >= 0 ? 'confirmed' : (a.s.indexOf(0) >= 0 ? 'purchased' : 'cancelled');
+      // is_confirmed=1 -> 'settled' (AT doi soat xong, AN TOAN tra khach); status1 chua confirm -> 'confirmed' (tentative)
+      let status;
+      if (a.conf) status = 'settled';
+      else if (a.s.indexOf(1) >= 0) status = 'confirmed';
+      else if (a.s.indexOf(0) >= 0) status = 'purchased';
+      else status = 'cancelled';
       const commission = Math.round(a.com);
       const cashback = Math.round(a.com * CASHBACK_RATE);
-      // Phat hien chuyen sang 'confirmed' LAN DAU -> tu nhac khach gui STK (chi push 1 lan nho check status cu)
+      // Lan dau vao confirmed/settled -> nhac khach gui STK (check status cu de push 1 lan)
       let prior = null;
-      if (status === 'confirmed') { const rows = await supabaseFind(code, env); prior = (rows && rows[0]) || null; }
+      if (status === 'confirmed' || status === 'settled') { const rows = await supabaseFind(code, env); prior = (rows && rows[0]) || null; }
       if (await syncSetStatusCashback(code, status, cashback, commission, env)) {
         updated++;
-        if (status === 'confirmed' && prior && prior.status !== 'confirmed' && prior.status !== 'paid') {
+        const wasEarly = prior && ['notified', 'web', 'purchased'].indexOf(prior.status) >= 0;
+        if ((status === 'confirmed' || status === 'settled') && wasEarly) {
           const money = cashback > 0 ? ('~' + String(cashback).replace(/\B(?=(\d{3})+(?!\d))/g, '.') + 'đ') : 'tiền hoàn';
           await notifyOrderRow(prior, '🎉 Đơn đã đối soát — tiền hoàn sắp về!', 'Đơn ' + code + ' đã được sàn đối soát. Gửi STK để shop chuyển ' + money + ' cho bạn 💸', '/track?q=' + code, env);
         }
@@ -427,7 +436,7 @@ async function notifyThreadPush(thread, title, bodyText, env) {
 
 function statusLabel(s) {
   const m = { notified: '🟡 Đã tạo link — chờ bạn mua', web: '🟡 Đã tạo link — chờ bạn mua',
-    purchased: '🟢 Đã ghi nhận mua', confirmed: '🔵 Sàn đã đối soát', paid: '✅ Đã hoàn tiền' };
+    purchased: '🟢 Đã ghi nhận mua', confirmed: '🔵 Đã duyệt — đang đối soát', settled: '🟢 Đã đối soát — tiền sắp về', paid: '✅ Đã hoàn tiền' };
   return m[s] || '🟡 Đang xử lý';
 }
 
@@ -1130,7 +1139,7 @@ const ADMIN_HTML = `<!doctype html>
 </div>
 <script>
 var $=function(i){return document.getElementById(i)};var PASS='';
-var STATUSES=[['notified','Chờ mua'],['purchased','Đã mua'],['confirmed','Đối soát'],['paid','Đã hoàn'],['cancelled','Huỷ']];
+var STATUSES=[['notified','Chờ mua'],['purchased','Đã mua'],['confirmed','Đã duyệt (tạm)'],['settled','AT đã đối soát ✓'],['paid','Đã hoàn'],['cancelled','Huỷ']];
 function opts(cur){return STATUSES.map(function(s){return '<option value="'+s[0]+'"'+((s[0]===cur||(cur==='web'&&s[0]==='notified'))?' selected':'')+'>'+s[1]+'</option>'}).join('')}
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
 function parseBank(bi){try{var o=JSON.parse(bi);if(o&&o.bin&&o.acc)return o;}catch(e){}return null;}
@@ -1167,7 +1176,10 @@ function render(rows){
   }});
   Array.prototype.forEach.call(document.querySelectorAll('.markpaid'),function(b){b.onclick=function(){
     var code=b.getAttribute('data-c');
-    if(!confirm('Xác nhận ĐÃ CHUYỂN tiền hoàn cho đơn '+code+'?\\n\\n⚠️ CHỈ bấm khi đơn đã qua đối soát / hết hạn đổi-trả. Trả sớm mà khách đổi/trả hàng → bạn MẤT tiền (không đòi lại được).')) return;
+    var row=(window._rows||[]).filter(function(x){return x.order_code===code})[0];
+    var safe=row&&row.status==='settled';
+    var msg=safe?('✅ Đơn '+code+' đã "AT đã đối soát ✓" — an toàn.\\n\\nXác nhận ĐÃ CHUYỂN tiền hoàn cho khách?'):('⚠️ Đơn '+code+' CHƯA "AT đã đối soát" — AccessTrade có thể chưa chốt, khách còn có thể đổi/trả.\\n\\nTrả bây giờ = bạn TỰ CHỊU rủi ro mất tiền. Vẫn tiếp tục?');
+    if(!confirm(msg)) return;
     b.textContent='...';
     fetch('/admin-update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS,order_code:code,status:'paid'})})
      .then(function(r){return r.json()}).then(function(d){if(d.ok){load(false)}else{b.textContent='✓ Đã chuyển';alert('Lỗi, thử lại')}}).catch(function(){b.textContent='✓ Đã chuyển'});
@@ -1187,7 +1199,7 @@ var syncb=$('syncbtn');if(syncb)syncb.onclick=function(){syncb.textContent='...'
 function loadStats(){fetch('/admin-stats',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS})}).then(function(r){return r.json()}).then(function(d){var by=d.by||{};
   function tile(l,v,c){return '<div style="flex:1;min-width:88px;background:#f7f9fc;border-radius:10px;padding:10px;text-align:center"><div style="font-size:22px;font-weight:800;color:'+c+'">'+v+'</div><div class="mut">'+l+'</div></div>'}
   function money(n){return (Math.round(n||0)).toLocaleString('vi-VN')+'đ'}
-  $('stattiles').innerHTML=tile('Tổng đơn',d.total||0,'#222')+tile('Chờ mua',by.notified||0,'#e6a700')+tile('Đã mua',by.purchased||0,'#12b76a')+tile('Đối soát',by.confirmed||0,'#1f6feb')+tile('Chờ hoàn',d.pending||0,'#FF4E73')+tile('Đã hoàn',d.paid||0,'#039855')
+  $('stattiles').innerHTML=tile('Tổng đơn',d.total||0,'#222')+tile('Chờ mua',by.notified||0,'#e6a700')+tile('Đã mua',by.purchased||0,'#12b76a')+tile('Đã duyệt',by.confirmed||0,'#1f6feb')+tile('AT đã trả ✓',by.settled||0,'#7c3aed')+tile('Chờ hoàn',d.pending||0,'#FF4E73')+tile('Đã hoàn',d.paid||0,'#039855')
     +tile('Tiền hoàn phải trả',money(d.cbPending),'#FF4E73')+tile('Đã trả (tiền)',money(d.cbPaid),'#039855')}).catch(function(){})}
 function loadFunnel(){fetch('/admin-funnel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS})}).then(function(r){return r.json()}).then(function(d){
   function pct(a,b){b=b||0;return b>0?Math.round((a||0)/b*100)+'%':'—'}
@@ -1437,7 +1449,7 @@ export default {
       if (!Array.isArray(rows)) rows = [];
       const by = {}; let cbExpected = 0, cbPaid = 0;
       rows.forEach(x => { const s = x.status === 'web' ? 'notified' : x.status; by[s] = (by[s] || 0) + 1; const cb = Math.round(x.cashback || 0); if (s !== 'cancelled') { cbExpected += cb; if (s === 'paid') cbPaid += cb; } });
-      return json({ total: rows.length, by, pending: by.confirmed || 0, paid: by.paid || 0, cbExpected, cbPaid, cbPending: cbExpected - cbPaid });
+      return json({ total: rows.length, by, pending: (by.confirmed || 0) + (by.settled || 0), paid: by.paid || 0, cbExpected, cbPaid, cbPending: cbExpected - cbPaid });
     }
     if (request.method === 'POST' && path === '/admin-funnel') {
       const body = await request.json().catch(() => ({}));
@@ -1446,7 +1458,7 @@ export default {
         supabaseCount('/rest/v1/events?select=id&type=eq.visit', env),
         supabaseCount('/rest/v1/events?select=id&type=eq.buy_click', env),
         supabaseCount('/rest/v1/submissions?select=id', env),
-        supabaseCount('/rest/v1/submissions?select=id&status=in.(purchased,confirmed,paid)', env)
+        supabaseCount('/rest/v1/submissions?select=id&status=in.(purchased,confirmed,settled,paid)', env)
       ]);
       return json({ visits, clicks, links, purchased });
     }
