@@ -9,7 +9,7 @@ import { sendWebPush } from './webpush.js';
 
 const VAPID_PUBLIC = 'BGNY3uTCFDGgY6g5UyFMrLmwnRXmWWXAroYoqYrIypZbJ-87xho81HsRNHE9NsQvwY96ADXiAtRPSVIAGyJJfFQ';
 const FB_GROUP = 'https://www.facebook.com/groups/1693634255519569';
-const PAYOUT = 'Lịch hoàn: ngày 20–25 hàng tháng, sau khi Shopee đối soát (~75–105 ngày).';
+const PAYOUT = 'Thời gian hoàn: TikTok ~30–45 ngày, Shopee ~2–3 tháng (sau khi sàn đối soát); shop chuyển ngày 20–25 hàng tháng.';
 
 const FAQ = {
   greeting:
@@ -27,14 +27,14 @@ Gõ "menu" để xem hướng dẫn.`,
 ✅ Ngày 18 hàng tháng: chốt báo cáo & xin số tài khoản (nếu lần đầu)
 ✅ Ngày 20–25: chuyển tiền hoàn vào STK của bạn
 ✅ Ngày 26: thông báo hoàn tất
-Lưu ý: đơn chỉ được hoàn sau khi Shopee đối soát (~75–105 ngày).`,
+⏱ Thời gian: TikTok ~30–45 ngày · Shopee ~2–3 tháng (sau khi sàn đối soát đơn).`,
   rules:
 `📋 NỘI QUY HOÀN TIỀN
 ✅ Phải bấm link shop gửi TRƯỚC khi mua
 ✅ Bấm link rồi chọn hàng & thanh toán ngay trong phiên (đừng để sẵn hàng trong giỏ)
 ✅ Đơn không hủy/hoàn trong 7 ngày
 ❌ Không tự mua gian lận, không đặt hộ
-⏱ Hoàn sau khi Shopee đối soát (~75–105 ngày)`,
+⏱ Hoàn sau khi sàn đối soát: TikTok ~30–45 ngày · Shopee ~2–3 tháng`,
   support:
 `💬 Shop đã nhận yêu cầu hỗ trợ của bạn và sẽ phản hồi trực tiếp trong giờ làm việc.
 Bạn cứ để lại câu hỏi ở đây nhé 🥰`,
@@ -619,7 +619,7 @@ const SHOP_HTML = `<!doctype html>
 <header>
   <div class="logo">M</div>
   <h1>Mushoplaho</h1>
-  <div class="sub"><b>Mua Shopee &amp; TikTok — nhận lại 50% hoa hồng</b><br>Đơn 1 triệu hoàn ~15.000đ (Shopee) → ~100.000đ (TikTok) · tùy sản phẩm · Miễn phí</div>
+  <div class="sub"><b>Mua Shopee &amp; TikTok Shop — nhận lại 50% hoa hồng</b><br>⚡ Ưu tiên TikTok: hoàn tới ~100k/đơn &amp; nhận nhanh ~30 ngày · Shopee tới ~15k · Miễn phí</div>
   <div class="hero-box">
     <div class="flabel">① Dán link sản phẩm <span class="req">BẮT BUỘC</span></div>
     <div class="inrow">
@@ -661,7 +661,7 @@ const SHOP_HTML = `<!doctype html>
     <h2>💰 Ví hoàn tiền của bạn <span class="mut" id="wcount" style="font-weight:400"></span></h2>
     <div id="wsummary" style="display:flex;gap:8px;margin-bottom:12px"></div>
     <div id="walletlist"></div>
-    <p class="muted" style="text-align:left;margin-top:6px">💸 Tiền hoàn tự động cập nhật sau khi Shopee đối soát. <a class="link" href="/track">Xem tất cả</a></p>
+    <p class="muted" style="text-align:left;margin-top:6px">💸 Tiền hoàn tự cập nhật sau khi sàn đối soát (TikTok ~30–45 ngày · Shopee ~2–3 tháng). <a class="link" href="/track">Xem tất cả</a></p>
   </div>
 
   <div class="card">
@@ -712,12 +712,12 @@ const SHOP_HTML = `<!doctype html>
     <li><b>Ngày 18</b> — chốt báo cáo &amp; xin STK (nếu lần đầu)</li>
     <li><b>Ngày 20–25</b> — chuyển tiền hoàn vào tài khoản bạn</li>
     <li><b>Ngày 26</b> — thông báo hoàn tất</li>
-    <li>Hoàn sau khi Shopee đối soát (~75–105 ngày)</li>
+    <li>Nhận sau đối soát: <b>TikTok ~30–45 ngày</b>, <b>Shopee ~2–3 tháng</b></li>
   </ul>
   <h3>❓ Câu hỏi thường gặp</h3>
   <div class="faq">
     <details><summary>Có mất phí không?</summary><p>Hoàn toàn miễn phí. Bạn chỉ dán link, mua như bình thường và nhận lại tiền.</p></details>
-    <details><summary>Bao lâu nhận được tiền?</summary><p>Sau khi Shopee đối soát (~75–105 ngày), tiền hoàn chuyển vào ngày 20–25 hàng tháng.</p></details>
+    <details><summary>Bao lâu nhận được tiền?</summary><p>TikTok ~30–45 ngày, Shopee ~2–3 tháng (sau khi sàn đối soát đơn). Sau đó tiền chuyển vào ngày 20–25 hàng tháng.</p></details>
     <details><summary>Vì sao phải bấm link trước khi mua?</summary><p>Link đó ghi nhận đơn để tính hoa hồng. Mua không qua link sẽ không được hoàn.</p></details>
     <details><summary>Hàng có chính hãng không?</summary><p>Bạn mua thẳng trên Shopee — sản phẩm, giá, bảo hành đều theo Shopee &amp; người bán.</p></details>
     <details><summary>Làm sao nhận tiền hoàn?</summary><p>Vào Nhóm Facebook, gửi ảnh đơn + STK. Shop đối chiếu và chuyển theo lịch.</p></details>
@@ -886,7 +886,7 @@ function render(d){var rows=(d&&d.orders)||[];var sm=(d&&d.summary)||{expected:0
   if(!rows.length){out.innerHTML='<p class="mut" style="margin-top:12px">Không tìm thấy đơn. Kiểm tra lại mã/SĐT nhé.</p>';return}
   var tiles='<div style="display:flex;gap:8px;margin:12px 0">'+wtile('Tổng dự kiến',sm.expected,'#FF4E73')+wtile('Đang chờ',sm.pending,'#e6a700')+wtile('Đã hoàn',sm.paid,'#039855')+'</div>';
   out.innerHTML=tiles+rows.map(function(r){return '<div class="row" style="display:flex;justify-content:space-between;gap:8px"><div><div class="st">'+(r.order_code||'(chưa có mã)')+' — '+r.status_label+'</div><div class="mut">'+(r.platform||'')+' · '+(r.when||'')+'</div></div><div style="font-weight:800;color:#FF4E73;white-space:nowrap">'+(r.cashback>0?('+'+fmt(r.cashback)):'—')+'</div></div>';}).join('')
-   +'<p class="mut" style="margin-top:12px">💸 Tiền hoàn = 50% hoa hồng đơn. Chuyển ngày 20–25 hàng tháng, sau khi Shopee đối soát (~75–105 ngày).</p>';
+   +'<p class="mut" style="margin-top:12px">💸 Tiền hoàn = 50% hoa hồng. Nhận sau đối soát: TikTok ~30–45 ngày · Shopee ~2–3 tháng; shop chuyển ngày 20–25 hàng tháng.</p>';
   var bc=document.getElementById('bankcard');if(bc){bc.style.display='block';var bi=document.getElementById('bank');if(bi&&d.bank&&!bi.value)bi.value=d.bank;}
 }
 function look(){var q=($('q').value||'').trim();if(q.length<4){out.innerHTML='<p class="mut" style="margin-top:12px">Nhập mã đơn hoặc SĐT nhé.</p>';return}
@@ -973,13 +973,14 @@ const HOW_HTML = `<!doctype html>
   </div>
 
   <div class="card">
-    <h2>💸 Lịch nhận tiền hoàn</h2>
+    <h2>💸 Bao lâu nhận được tiền hoàn?</h2>
+    <p style="font-size:15px;margin-bottom:10px">Tiền hoàn về <b>sau khi sàn đối soát đơn</b> (chờ bạn nhận hàng &amp; hết hạn đổi/trả — để tránh đơn huỷ). Thời gian tuỳ sàn:</p>
     <ul class="tl">
-      <li><b>Ngày 18</b> — chốt báo cáo & xin số tài khoản (nếu lần đầu)</li>
-      <li><b>Ngày 20–25</b> — chuyển tiền hoàn vào tài khoản của bạn</li>
-      <li><b>Ngày 26</b> — thông báo hoàn tất</li>
-      <li>Đơn được hoàn <b>sau khi sàn đối soát</b> (~75–105 ngày) để tránh đơn huỷ/hoàn hàng.</li>
+      <li><b>⚡ TikTok Shop: ~30–45 ngày</b> — đối soát 30 ngày, nhận nhanh.</li>
+      <li><b>Shopee: ~2–3 tháng</b> — Shopee đối soát lâu hơn.</li>
+      <li>Sau đối soát, shop chuyển tiền vào STK của bạn ở kỳ gần nhất (<b>ngày 20–25 hàng tháng</b>).</li>
     </ul>
+    <p class="mut" style="margin-top:8px">👉 Nhớ vào mục <b>Tra cứu</b> nhập STK để shop chuyển tiền hoàn cho bạn.</p>
   </div>
 
   <div class="card faq">
@@ -1172,7 +1173,7 @@ function loadFunnel(){fetch('/admin-funnel',{method:'POST',headers:{'Content-Typ
   function ft(l,v,sub){return '<div style="flex:1;min-width:108px;background:#f7f9fc;border-radius:10px;padding:10px;text-align:center"><div style="font-size:22px;font-weight:800">'+(v||0)+'</div><div class="mut">'+l+'</div>'+(sub?'<div style="color:#039855;font-weight:700;font-size:12px">'+sub+'</div>':'<div style="height:16px"></div>')+'</div>'}
   $('funneltiles').innerHTML=ft('Ghé thăm',d.visits,'')+ft('Tạo link',d.links,pct(d.links,d.visits))+ft('Bấm mua',d.clicks,pct(d.clicks,d.links))+ft('Đã mua',d.purchased,pct(d.purchased,d.clicks));
   $('funnelcard').style.display='block';}).catch(function(){})}
-var CANNED=['Đã nhận STK, cảm ơn bạn nhé! 💸','Đơn đang đối soát Shopee (~75–105 ngày), có tiền shop chuyển ngay ạ.','Bạn gửi giúp shop: STK + Ngân hàng + Tên chủ TK nhé.','Bạn nhớ bấm link shop gửi TRƯỚC khi mua để được ghi nhận nha.'];
+var CANNED=['Đã nhận STK, cảm ơn bạn nhé! 💸','Đơn đang đối soát (TikTok ~30–45 ngày, Shopee ~2–3 tháng), có tiền shop chuyển ngay ạ.','Bạn gửi giúp shop: STK + Ngân hàng + Tên chủ TK nhé.','Bạn nhớ bấm link shop gửi TRƯỚC khi mua để được ghi nhận nha.'];
 function renderCanned(){var el=$('cannedchips');if(!el)return;el.innerHTML=CANNED.map(function(q,i){return '<span data-ci="'+i+'" style="background:#eef4ff;color:#1f6feb;border:1px solid #cdddff;border-radius:999px;padding:5px 10px;font-size:12px;cursor:pointer">'+esc(q.slice(0,20))+'…</span>'}).join('');Array.prototype.forEach.call(el.querySelectorAll('[data-ci]'),function(c){c.onclick=function(){$('creply').value=CANNED[+c.getAttribute('data-ci')];if(curThread)$('csend').click()}})}
 var FBSAMPLE='🔥 MẸO MUA SHOPEE ĐƯỢC HOÀN LẠI TIỀN\\n\\nMua đồ Shopee như bình thường, qua 1 bước nhỏ là được HOÀN tới 50% hoa hồng của đơn về tài khoản 💸\\n\\n👉 Dán link sản phẩm vào: mushoplaho.kientlt59.workers.dev\\nMiễn phí, không cần cài app. Ai hay mua Shopee lưu lại nhé!';
 if($('fbmsg')&&!$('fbmsg').value)$('fbmsg').value=FBSAMPLE;
