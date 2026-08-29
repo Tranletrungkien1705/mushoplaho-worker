@@ -1149,7 +1149,7 @@ function render(rows){
   $('tbl').tBodies[0].innerHTML=list.map(function(r){
     var d=r.created_at?String(r.created_at).slice(0,10):'';
     var bo=parseBank(r.bank_info);
-    var stk=bo?('<div style="font-size:12px;line-height:1.35"><b>'+esc(bo.acc)+'</b> · '+esc(bo.bankName||bo.bin)+'<br>'+esc(bo.name||'')+'</div><a href="'+vietqr(bo,r.cashback,r.order_code)+'" target="_blank" style="display:inline-block;margin-top:5px;padding:5px 9px;background:#12b76a;color:#fff;border-radius:6px;text-decoration:none;font-size:12px;font-weight:700">📲 QR chuyển tiền</a>'):('<input class="stk" data-c="'+esc(r.order_code)+'" value="'+esc(r.bank_info)+'" placeholder="STK / NH / tên" style="width:150px">');
+    var stk=bo?('<div style="font-size:12px;line-height:1.35"><b>'+esc(bo.acc)+'</b> · '+esc(bo.bankName||bo.bin)+'<br>'+esc(bo.name||'')+'</div><a href="'+vietqr(bo,r.cashback,r.order_code)+'" target="_blank" style="display:inline-block;margin-top:5px;padding:5px 9px;background:#12b76a;color:#fff;border-radius:6px;text-decoration:none;font-size:12px;font-weight:700">📲 QR chuyển tiền</a>'+(r.status==='paid'?'<span style="color:#039855;font-weight:700;font-size:12px;margin-left:6px">✓ Đã hoàn</span>':'<button class="sm markpaid" data-c="'+esc(r.order_code)+'" style="margin-top:5px;margin-left:5px;padding:5px 9px;background:#039855;font-size:12px">✓ Đã chuyển</button>')):('<input class="stk" data-c="'+esc(r.order_code)+'" value="'+esc(r.bank_info)+'" placeholder="STK / NH / tên" style="width:150px">');
     return '<tr><td><b>'+esc(r.order_code)+'</b><div class="mut">'+d+'</div></td><td>'+esc(r.contact)+'</td>'
       +'<td>'+stk+'</td>'
       +'<td>'+esc(r.platform)+'</td>'
@@ -1164,6 +1164,13 @@ function render(rows){
     var stk=document.querySelector('input.stk[data-c="'+code+'"]');var note=document.querySelector('input.note[data-c="'+code+'"]');
     b.textContent='...';fetch('/admin-update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS,order_code:code,status:sel.value,bank_info:stk?stk.value:undefined,admin_note:note?note.value:undefined})})
      .then(function(r){return r.json()}).then(function(d){b.textContent=d.ok?'✓':'lỗi';setTimeout(function(){b.textContent='Lưu'},1200)});
+  }});
+  Array.prototype.forEach.call(document.querySelectorAll('.markpaid'),function(b){b.onclick=function(){
+    var code=b.getAttribute('data-c');
+    if(!confirm('Xác nhận ĐÃ CHUYỂN tiền hoàn cho đơn '+code+'?\\n\\n⚠️ CHỈ bấm khi đơn đã qua đối soát / hết hạn đổi-trả. Trả sớm mà khách đổi/trả hàng → bạn MẤT tiền (không đòi lại được).')) return;
+    b.textContent='...';
+    fetch('/admin-update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS,order_code:code,status:'paid'})})
+     .then(function(r){return r.json()}).then(function(d){if(d.ok){load(false)}else{b.textContent='✓ Đã chuyển';alert('Lỗi, thử lại')}}).catch(function(){b.textContent='✓ Đã chuyển'});
   }});
 }
 $('btnLogin').onclick=login;$('pass').addEventListener('keydown',function(e){if(e.key==='Enter')login()});
