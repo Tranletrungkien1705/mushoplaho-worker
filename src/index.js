@@ -872,9 +872,11 @@ const TRACK_HTML = `<!doctype html>
   </div>
   <div class="card" id="bankcard" style="display:none">
     <div style="font-weight:800;font-size:16px;margin-bottom:6px">💳 Số tài khoản nhận tiền hoàn</div>
-    <p class="mut" style="margin-bottom:8px">Nhập <b>STK · Ngân hàng · Tên chủ TK</b> để shop chuyển tiền hoàn theo lịch. Bạn có thể cập nhật bất cứ lúc nào.</p>
-    <input id="bank" placeholder="VD: 0123456789 · Vietcombank · NGUYEN VAN A" autocomplete="off">
-    <button class="btn" id="savebank">💾 Lưu số tài khoản</button>
+    <p class="mut" style="margin-bottom:8px">Chọn <b>Ngân hàng</b> + nhập <b>Số TK</b> + <b>Tên chủ TK</b> để shop chuyển tiền hoàn. Cập nhật bất cứ lúc nào.</p>
+    <select id="bankSel" style="width:100%;padding:13px 12px;border:2px solid #ffd9c9;border-radius:14px;font-size:16px;outline:none;background:#fff"></select>
+    <input id="bankAcc" inputmode="numeric" placeholder="Số tài khoản" autocomplete="off" style="margin-top:10px">
+    <input id="bankHolder" placeholder="Tên chủ TK (VIẾT HOA không dấu)" autocomplete="off" style="margin-top:10px;text-transform:uppercase">
+    <button class="btn" id="savebank" style="margin-top:12px">💾 Lưu số tài khoản</button>
     <p class="mut" id="bankmsg" style="margin-top:8px"></p>
   </div>
 </div>
@@ -887,7 +889,9 @@ function render(d){var rows=(d&&d.orders)||[];var sm=(d&&d.summary)||{expected:0
   var tiles='<div style="display:flex;gap:8px;margin:12px 0">'+wtile('Tổng dự kiến',sm.expected,'#FF4E73')+wtile('Đang chờ',sm.pending,'#e6a700')+wtile('Đã hoàn',sm.paid,'#039855')+'</div>';
   out.innerHTML=tiles+rows.map(function(r){return '<div class="row" style="display:flex;justify-content:space-between;gap:8px"><div><div class="st">'+(r.order_code||'(chưa có mã)')+' — '+r.status_label+'</div><div class="mut">'+(r.platform||'')+' · '+(r.when||'')+'</div></div><div style="font-weight:800;color:#FF4E73;white-space:nowrap">'+(r.cashback>0?('+'+fmt(r.cashback)):'—')+'</div></div>';}).join('')
    +'<p class="mut" style="margin-top:12px">💸 Tiền hoàn = 50% hoa hồng. Nhận sau đối soát: TikTok ~30–45 ngày · Shopee ~2–3 tháng; shop chuyển ngày 20–25 hàng tháng.</p>';
-  var bc=document.getElementById('bankcard');if(bc){bc.style.display='block';var bi=document.getElementById('bank');if(bi&&d.bank&&!bi.value)bi.value=d.bank;}
+  var bc=document.getElementById('bankcard');if(bc){bc.style.display='block';
+    if(d.bank){try{var o=JSON.parse(d.bank);if(o&&o.bin){var s=document.getElementById('bankSel');if(s&&!s.value)s.value=o.bin;var a=document.getElementById('bankAcc');if(a&&!a.value)a.value=o.acc||'';var h=document.getElementById('bankHolder');if(h&&!h.value)h.value=o.name||'';}}catch(e){}}
+  }
 }
 function look(){var q=($('q').value||'').trim();if(q.length<4){out.innerHTML='<p class="mut" style="margin-top:12px">Nhập mã đơn hoặc SĐT nhé.</p>';return}
   out.innerHTML='<p class="mut" style="margin-top:12px">Đang tra...</p>';
@@ -895,11 +899,17 @@ function look(){var q=($('q').value||'').trim();if(q.length<4){out.innerHTML='<p
    .then(function(r){return r.json()}).then(function(d){render(d||{})})
    .catch(function(){out.innerHTML='<p class="mut">Lỗi, thử lại sau.</p>'});}
 $('go').addEventListener('click',look);$('q').addEventListener('keydown',function(e){if(e.key==='Enter')look()});
-var sbk=document.getElementById('savebank');if(sbk)sbk.onclick=function(){var q=($('q').value||'').trim();var bank=(document.getElementById('bank').value||'').trim();var msg=document.getElementById('bankmsg');
+var BANKS=[['970436','Vietcombank'],['970415','VietinBank'],['970418','BIDV'],['970405','Agribank'],['970407','Techcombank'],['970422','MB Bank'],['970416','ACB'],['970432','VPBank'],['970423','TPBank'],['970403','Sacombank'],['970437','HDBank'],['970441','VIB'],['970443','SHB'],['970431','Eximbank'],['970426','MSB'],['970448','OCB'],['970440','SeABank'],['970454','BVBank'],['546034','Cake by VPBank'],['963388','Timo']];
+(function(){var s=document.getElementById('bankSel');if(s)s.innerHTML='<option value="">— Chọn ngân hàng —</option>'+BANKS.map(function(b){return '<option value="'+b[0]+'">'+b[1]+'</option>'}).join('');})();
+var sbk=document.getElementById('savebank');if(sbk)sbk.onclick=function(){var q=($('q').value||'').trim();var msg=document.getElementById('bankmsg');
+  var sel=document.getElementById('bankSel'),acc=(document.getElementById('bankAcc').value||'').trim(),nm=(document.getElementById('bankHolder').value||'').trim().toUpperCase();
+  var bin=sel.value,bankName=sel.options[sel.selectedIndex]?sel.options[sel.selectedIndex].text:'';
   if(q.length<4){msg.textContent='Hãy tra cứu đơn của bạn trước nhé.';return}
-  if(bank.length<6){msg.textContent='Nhập đủ STK · Ngân hàng · Tên chủ TK.';return}
+  if(!bin){msg.textContent='Chọn ngân hàng nhé.';return}
+  if(!/^[0-9]{6,19}$/.test(acc)){msg.textContent='Số tài khoản chưa đúng (chỉ gồm chữ số).';return}
+  if(nm.length<3){msg.textContent='Nhập tên chủ tài khoản.';return}
   sbk.textContent='Đang lưu...';
-  fetch('/track-bank',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:q,bank_info:bank})}).then(function(r){return r.json()}).then(function(d){sbk.textContent='💾 Lưu số tài khoản';msg.textContent=d.ok?'✅ Đã lưu! Shop sẽ chuyển tiền hoàn vào STK này theo lịch 💸':('❌ '+(d.error||'Lỗi, thử lại'));}).catch(function(){sbk.textContent='💾 Lưu số tài khoản';msg.textContent='❌ Lỗi mạng, thử lại';});};
+  fetch('/track-bank',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:q,bank_bin:bin,bank_acc:acc,bank_name:nm,bank_display:bankName})}).then(function(r){return r.json()}).then(function(d){sbk.textContent='💾 Lưu số tài khoản';msg.textContent=d.ok?'✅ Đã lưu! Shop sẽ chuyển tiền hoàn vào STK này 💸':('❌ '+(d.error||'Lỗi, thử lại'));}).catch(function(){sbk.textContent='💾 Lưu số tài khoản';msg.textContent='❌ Lỗi mạng, thử lại';});};
 var qs=new URLSearchParams(location.search).get('q');if(qs){$('q').value=qs;look()}
 <\/script>
 </body></html>`;
@@ -1123,6 +1133,8 @@ var $=function(i){return document.getElementById(i)};var PASS='';
 var STATUSES=[['notified','Chờ mua'],['purchased','Đã mua'],['confirmed','Đối soát'],['paid','Đã hoàn'],['cancelled','Huỷ']];
 function opts(cur){return STATUSES.map(function(s){return '<option value="'+s[0]+'"'+((s[0]===cur||(cur==='web'&&s[0]==='notified'))?' selected':'')+'>'+s[1]+'</option>'}).join('')}
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function parseBank(bi){try{var o=JSON.parse(bi);if(o&&o.bin&&o.acc)return o;}catch(e){}return null;}
+function vietqr(o,amt,code){return 'https://img.vietqr.io/image/'+o.bin+'-'+o.acc+'-compact2.png?amount='+Math.round(amt||0)+'&addInfo='+encodeURIComponent('MLH '+code)+'&accountName='+encodeURIComponent(o.name||'');}
 function login(){PASS=$('pass').value;$('lerr').textContent='';load(true)}
 function load(first){
   fetch('/admin-list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS})})
@@ -1136,8 +1148,10 @@ function render(rows){
   $('cnt').textContent=list.length;
   $('tbl').tBodies[0].innerHTML=list.map(function(r){
     var d=r.created_at?String(r.created_at).slice(0,10):'';
+    var bo=parseBank(r.bank_info);
+    var stk=bo?('<div style="font-size:12px;line-height:1.35"><b>'+esc(bo.acc)+'</b> · '+esc(bo.bankName||bo.bin)+'<br>'+esc(bo.name||'')+'</div><a href="'+vietqr(bo,r.cashback,r.order_code)+'" target="_blank" style="display:inline-block;margin-top:5px;padding:5px 9px;background:#12b76a;color:#fff;border-radius:6px;text-decoration:none;font-size:12px;font-weight:700">📲 QR chuyển tiền</a>'):('<input class="stk" data-c="'+esc(r.order_code)+'" value="'+esc(r.bank_info)+'" placeholder="STK / NH / tên" style="width:150px">');
     return '<tr><td><b>'+esc(r.order_code)+'</b><div class="mut">'+d+'</div></td><td>'+esc(r.contact)+'</td>'
-      +'<td><input class="stk" data-c="'+esc(r.order_code)+'" value="'+esc(r.bank_info)+'" placeholder="STK / NH / tên" style="width:160px"></td>'
+      +'<td>'+stk+'</td>'
       +'<td>'+esc(r.platform)+'</td>'
       +'<td style="white-space:nowrap;font-weight:700;color:#FF4E73">'+(r.cashback>0?(Number(r.cashback).toLocaleString('vi-VN')+'đ'):'')+'</td>'
       +'<td><select data-c="'+esc(r.order_code)+'">'+opts(r.status)+'</select></td>'
@@ -1365,15 +1379,21 @@ export default {
     if (request.method === 'POST' && path === '/track-bank') {
       const body = await request.json().catch(() => ({}));
       const q = (body.q || '').trim();
-      const bank = (body.bank_info || '').trim().slice(0, 200);
-      if (!q || bank.length < 6) return json({ error: 'Vui lòng nhập đủ STK + Ngân hàng + Tên chủ TK' }, 400);
+      if (!q || q.length < 4) return json({ error: 'Thiếu mã đơn/SĐT' }, 400);
+      let bankInfo = '';
+      const bin = (body.bank_bin || '').trim(), acc = (body.bank_acc || '').trim();
+      if (bin && /^\d{6,19}$/.test(acc)) {   // structured -> luu JSON (de sinh VietQR)
+        bankInfo = JSON.stringify({ bin, acc, name: (body.bank_name || '').trim().slice(0, 60), bankName: (body.bank_display || '').trim().slice(0, 40) });
+      } else if ((body.bank_info || '').trim().length >= 6) {   // legacy text
+        bankInfo = (body.bank_info || '').trim().slice(0, 200);
+      } else return json({ error: 'Chọn ngân hàng + nhập đủ số TK và tên' }, 400);
       const safe = encodeURIComponent(q);
       const filter = `or=(order_code.eq.${safe},contact.eq.${safe},buyer_psid.eq.${safe})`;
       try {
         const r = await fetch(env.SUPABASE_URL + '/rest/v1/submissions?' + filter, {
           method: 'PATCH',
           headers: { apikey: env.SUPABASE_SERVICE_KEY, 'Authorization': 'Bearer ' + env.SUPABASE_SERVICE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-          body: JSON.stringify({ bank_info: bank })
+          body: JSON.stringify({ bank_info: bankInfo })
         });
         return json({ ok: r.ok });
       } catch (e) { return json({ ok: false }, 500); }
