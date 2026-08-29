@@ -1097,12 +1097,13 @@ const ADMIN_HTML = `<!doctype html>
   <div class="card" id="panel" style="display:none">
     <div class="bar" style="justify-content:space-between">
       <div><b id="cnt">0</b> đơn · <span class="mut">mới nhất trước</span></div>
-      <div class="bar"><input id="filter" placeholder="Lọc mã/SĐT/sàn" style="width:170px"><button class="sm" id="syncbtn">🔄 Sync AccessTrade</button><button class="sm" id="reload">Tải lại</button></div>
+      <div class="bar"><input id="filter" placeholder="Lọc mã/SĐT/sàn" style="width:150px"><button class="sm" id="syncbtn">🔄 Sync AccessTrade</button><button class="sm" id="payoutbtn" style="background:#7c3aed">📋 Xuất DS cần trả</button><button class="sm" id="reload">Tải lại</button></div>
     </div>
     <p class="mut" style="margin-top:6px">Trạng thái <b>Đã mua/Đối soát/Huỷ</b> tự đồng bộ từ AccessTrade (6h/lần hoặc bấm Sync). Bạn chỉ cần chọn <b>"Đã hoàn"</b> khi đã chuyển tiền cho khách.</p>
     <div class="ov"><table id="tbl"><thead><tr>
       <th>Mã đơn</th><th>Liên hệ</th><th>STK ngân hàng</th><th>Sàn</th><th>Hoàn</th><th>Trạng thái</th><th>Ghi chú</th><th></th><th>Link</th>
     </tr></thead><tbody></tbody></table></div>
+    <div id="payoutbox" style="display:none;margin-top:14px;border-top:2px solid #eef1f6;padding-top:12px"></div>
   </div>
   <div class="card" id="chatpanel" style="display:none">
     <b>💬 Tin nhắn khách</b>
@@ -1187,6 +1188,23 @@ function render(rows){
 }
 $('btnLogin').onclick=login;$('pass').addEventListener('keydown',function(e){if(e.key==='Enter')login()});
 $('reload').onclick=function(){load(false)};$('filter').addEventListener('input',function(){render(window._rows||[])});
+function buildPayout(){
+  var rows=(window._rows||[]).filter(function(r){return r.status==='settled';});
+  var box=$('payoutbox');box.style.display='block';
+  if(!rows.length){box.innerHTML='<p class="mut">Chưa có đơn "AT đã đối soát ✓" cần trả. (Chỉ nên trả đơn đã đối soát để tránh rủi ro đổi/trả.)</p>';return;}
+  var total=0,txt='DANH SÁCH CẦN TRẢ ('+rows.length+' đơn):\\n';var body='';
+  rows.forEach(function(r){
+    var cb=Math.round(r.cashback||0);total+=cb;var bo=parseBank(r.bank_info);
+    var bankStr=bo?(bo.acc+' · '+(bo.bankName||bo.bin)+' · '+(bo.name||'')):'(CHƯA có STK — nhắc khách)';
+    body+='<tr><td><b>'+esc(r.order_code)+'</b></td><td style="color:#FF4E73;font-weight:700;white-space:nowrap">'+cb.toLocaleString('vi-VN')+'đ</td><td style="font-size:12px">'+esc(bankStr)+'</td><td>'+(bo?'<a href="'+vietqr(bo,cb,r.order_code)+'" target="_blank" style="padding:4px 8px;background:#12b76a;color:#fff;border-radius:6px;text-decoration:none;font-size:12px">📲 QR</a>':'—')+'</td></tr>';
+    txt+='• '+r.order_code+' | '+cb.toLocaleString('vi-VN')+'đ | '+bankStr+'\\n';
+  });
+  txt+='TỔNG: '+total.toLocaleString('vi-VN')+'đ';
+  box.innerHTML='<div style="font-weight:800;margin-bottom:8px">💸 '+rows.length+' đơn cần trả · Tổng <span style="color:#FF4E73">'+total.toLocaleString('vi-VN')+'đ</span> <button class="sm" id="copyPayout" style="margin-left:8px;background:#555">📄 Sao chép</button></div><div class="ov"><table style="width:100%;font-size:13px"><thead><tr><th>Mã</th><th>Tiền</th><th>Ngân hàng · STK · Tên</th><th>QR</th></tr></thead><tbody>'+body+'</tbody></table></div>';
+  window._payoutTxt=txt;
+  $('copyPayout').onclick=function(){var c=this;if(navigator.clipboard)navigator.clipboard.writeText(window._payoutTxt).then(function(){c.textContent='✓ Đã copy'});};
+}
+var pob=$('payoutbtn');if(pob)pob.onclick=buildPayout;
 var curThread=null;
 function loadThreads(){fetch('/admin-threads',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS})}).then(function(r){return r.json()}).then(function(d){var t=(d.threads)||[];
   $('threads').innerHTML=t.length?t.map(function(x){return '<div class="row" style="cursor:pointer" data-th="'+esc(x.thread)+'"><b style="font-size:13px">'+esc(x.thread)+'</b><div class="mut">'+(x.sender==='admin'?'Bạn: ':'')+esc((x.last||'').slice(0,36))+'</div></div>'}).join(''):'<p class="mut">Chưa có tin nhắn</p>';
