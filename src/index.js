@@ -440,7 +440,7 @@ const BOT_FUZZY = [
   { w: ['hoan', 'phan', 'tram', 'nhieu', 'le'], p: 'hoan bao nhieu %' },
   { w: ['bao', 'lau', 'khi', 'nao', 'ngay', 'bao gio'], p: 'bao lau' },
   { w: ['cach', 'mua', 'lam', 'sao', 'dung', 'dat hang'], p: 'cach mua' },
-  { w: ['gia', 'ship', 'mac', 'van chuyen', 'dat hon', 'phi'], p: 'phi ship' },
+  { w: ['gia', 'ship', 'mac', 'van chuyen', 'dat hon'], p: 'ship bao nhieu' },
   { w: ['stk', 'tai', 'khoan', 'ngan', 'rut', 'chuyen', 'nhan', 'tien', 'nhap', 'hoan'], p: 'stk' },
   { w: ['uy', 'tin', 'lua', 'dao', 'scam'], p: 'uy tin' },
   { w: ['chinh', 'hang', 'hanh', 'nhai', 'gia'], p: 'chinh hang' },
