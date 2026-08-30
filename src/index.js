@@ -377,8 +377,10 @@ async function syncAccessTrade(env) {
 // Bot tu tra loi cau hoi thuong gap trong chat (khop tu khoa). Khong khop -> null (de admin tra loi).
 function botReply(text) {
   // Bo dau tieng Viet de khop ca khi user go khong dau
-  const t = (text || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').trim();
+  let t = (text || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').trim();
   if (!t) return null;
+  // Bo xung ho dau cau ("shop oi cho hoi ..." -> "cho hoi ...") de khong bi bat nham thanh chao hoi
+  t = t.replace(/^(shop oi|ad oi|em oi|ban oi|chi oi|anh oi)\s+(?=\S)/, '');
   // Cam on
   if (/^(cam on|thanks|thank|tks|thank you)|cam on/.test(t)) return 'Dạ cảm ơn bạn 🥰 Cần gì thêm cứ nhắn shop nhé!';
   // Chao hoi
@@ -427,6 +429,39 @@ function botReply(text) {
   if (/check don|tra cuu|kiem tra don|don cua toi|xem don|tinh trang|trang thai|don toi dau/.test(t)) return 'Bạn vào mục "Tra cứu đơn" (hoặc gõ mã MLH-... của bạn vào đây) để xem trạng thái + tiền hoàn nhé 🔎';
   // Ho tro / gap nguoi
   if (/ho tro|cskh|gap nguoi|gap admin|tu van|noi chuyen|gap shop/.test(t)) return FAQ.support;
+  return null;
+}
+
+// Khach BAO bot tra loi sai / muon gap nguoi -> escalate sang admin
+const BOT_ESCALATE = /tra loi sai|noi sai|sai roi|khong dung y|khong phai vay|khong dung roi|khong hieu y|gap nguoi|gap nhan vien|nhan vien that|nguoi that|tu van vien|gap admin|muon gap|gap truc tiep|dua nguoi|tra loi lai|noi voi nguoi/;
+// Fuzzy fallback: khong khop chinh xac -> cham diem tu khoa, re-run 'probe' de lay dung cau tra loi (khong nhan doi noi dung)
+const BOT_FUZZY = [
+  { w: ['phi', 'mien', 'tien', 'free', 'ton'], p: 'phi' },
+  { w: ['hoan', 'phan', 'tram', 'nhieu', 'le'], p: 'hoan bao nhieu %' },
+  { w: ['bao', 'lau', 'khi', 'nao', 'ngay', 'bao gio'], p: 'bao lau' },
+  { w: ['cach', 'mua', 'lam', 'sao', 'dung', 'dat hang'], p: 'cach mua' },
+  { w: ['gia', 'ship', 'mac', 'van chuyen', 'dat hon', 'phi'], p: 'phi ship' },
+  { w: ['stk', 'tai', 'khoan', 'ngan', 'rut', 'chuyen', 'nhan', 'tien', 'nhap', 'hoan'], p: 'stk' },
+  { w: ['uy', 'tin', 'lua', 'dao', 'scam'], p: 'uy tin' },
+  { w: ['chinh', 'hang', 'hanh', 'nhai', 'gia'], p: 'chinh hang' },
+  { w: ['app', 'cai', 'tai', 'download'], p: 'cai app' },
+  { w: ['tiktok', 'shopee', 'lazada', 'san'], p: 'shopee' },
+  { w: ['voucher', 'giam', 'coupon', 'khuyen'], p: 'ma giam gia' },
+  { w: ['gioi', 'thieu', 'moi', 'chia', 'ban'], p: 'gioi thieu' },
+  { w: ['check', 'tra', 'cuu', 'don', 'trang', 'thai'], p: 'tra cuu' },
+  { w: ['noi', 'quy', 'dieu', 'kien'], p: 'noi quy' },
+  { w: ['ghi', 'nhan', 'mat', 'chua', 'thay'], p: 'mua roi chua thay hoan' }
+];
+function botAnswer(text) {
+  const t = (text || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').trim();
+  if (!t) return null;
+  if (BOT_ESCALATE.test(t)) return { escalate: true };
+  const exact = botReply(text);
+  if (exact) return { answer: exact };
+  const toks = t.split(/[^a-z0-9]+/).filter(w => w.length >= 3);
+  let best = null, bs = 0;
+  for (const f of BOT_FUZZY) { let sc = 0; for (const w of f.w) { if (w.length >= 3 && toks.indexOf(w) >= 0) sc++; } if (sc > bs) { bs = sc; best = f; } }
+  if (best && bs >= 2) { const a = botReply(best.p); if (a) return { answer: a, fuzzy: true }; }
   return null;
 }
 
@@ -1042,6 +1077,7 @@ const HOW_HTML = `<!doctype html>
       <li>Sau đối soát, shop chuyển tiền vào STK của bạn ở kỳ gần nhất (<b>ngày 20–25 hàng tháng</b>).</li>
     </ul>
     <p class="mut" style="margin-top:8px">👉 Nhớ vào mục <b>Tra cứu</b> nhập STK để shop chuyển tiền hoàn cho bạn.</p>
+    <p class="mut" style="margin-top:6px">ℹ️ <b>Minh bạch:</b> do cơ chế ghi nhận của sàn, một số đơn (~20%) có thể không được ghi nhận (VD: bỏ hàng vào giỏ trước rồi mới bấm link, hoặc mua qua link khác). Shop hoàn <b>các đơn được sàn ghi nhận</b> — nên bạn nhớ bấm link shop gửi ngay trước khi mua nhé!</p>
   </div>
 
   <div class="card faq">
@@ -1621,10 +1657,14 @@ export default {
       if (!text) return json({ error: 'empty' }, 400);
       const thread = (contact && contact.length >= 4) ? contact : ('dev:' + uid);
       await chatInsert({ thread, sender: 'user', text }, env);
-      const br = botReply(text);
-      if (br) await chatInsert({ thread, sender: 'bot', text: br }, env);
+      const res = botAnswer(text);
+      let botText;
+      if (res && res.answer) botText = res.answer;
+      else if (res && res.escalate) { botText = 'Dạ để shop nhờ nhân viên phản hồi bạn trực tiếp nhé, bạn chờ chút xíu 🙏'; ctx.waitUntil(evInsert('bot_escalate', text.slice(0, 40), env)); }
+      else { botText = 'Shop chưa hiểu rõ ý bạn 🙈 Để nhân viên trả lời bạn ngay! Trong lúc chờ, bạn gõ "menu" để xem các mục thường gặp nhé.'; ctx.waitUntil(evInsert('bot_miss', text.slice(0, 40), env)); }
+      await chatInsert({ thread, sender: 'bot', text: botText }, env);
       ctx.waitUntil(broadcastMsg(thread, env));
-      return json({ ok: true, thread, bot: br || '' });
+      return json({ ok: true, thread, bot: botText });
     }
     if (request.method === 'GET' && path === '/chat-history') {
       const msgs = await chatHistory(url.searchParams.get('thread'), url.searchParams.get('after'), env);
