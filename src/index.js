@@ -377,14 +377,56 @@ async function syncAccessTrade(env) {
 // Bot tu tra loi cau hoi thuong gap trong chat (khop tu khoa). Khong khop -> null (de admin tra loi).
 function botReply(text) {
   // Bo dau tieng Viet de khop ca khi user go khong dau
-  const t = (text || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd');
-  if (/\bphi\b|mat tien|free|mien phi|ton tien|co tinh phi|tinh phi|co ton/.test(t)) return 'Dạ hoàn toàn MIỄN PHÍ ạ 🥰 Bạn chỉ dán link, mua như bình thường và nhận lại tiền hoàn.';
-  if (/bao lau|khi nao|may ngay|bao gio|lau khong|chung nao|luc nao|nhan tien khi/.test(t)) return FAQ.schedule;
-  if (/cach mua|lam sao mua|mua the nao|mua sao|huong dan|mua nhu the/.test(t)) return FAQ.howto;
+  const t = (text || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').trim();
+  if (!t) return null;
+  // Cam on
+  if (/^(cam on|thanks|thank|tks|thank you)|cam on/.test(t)) return 'Dạ cảm ơn bạn 🥰 Cần gì thêm cứ nhắn shop nhé!';
+  // Chao hoi
+  if (/^(chao|hi|hello|hey|alo|shop oi|e shop|xin chao|em oi|ad oi|shop)/.test(t)) return FAQ.greeting;
+  // Mua roi ma khong thay hoan / chua co tien / khong ghi nhan (lost/attribution) — de TRUOC "cach mua"
+  if (/mua roi.*(khong|chua)|(khong|chua).*(thay|nhan|co).*(hoan|tien)|sao chua co|sao khong duoc|khong len don|khong ghi nhan|don khong len|mat don|khong duoc tinh|chua thay hoan|chua co hoan/.test(t)) return 'Bạn yên tâm nhé 🙏 Đơn được hoàn SAU khi sàn đối soát: TikTok ~30–45 ngày, Shopee ~2–3 tháng. Lưu ý: đơn chỉ được tính khi bạn bấm ĐÚNG link shop gửi ngay TRƯỚC khi mua (không để sẵn hàng trong giỏ). Gõ "check đơn" kèm mã MLH để tra cứu nhé!';
+  // Tai sao phai bam link truoc
+  if (/tai sao.*bam|sao phai bam|vi sao.*link|phai bam link|sao phai qua link/.test(t)) return 'Link đó giúp sàn ghi nhận đơn để tính hoa hồng cho bạn. Mua KHÔNG qua link thì sàn không ghi nhận → không có tiền hoàn. Nên luôn bấm link shop gửi rồi mới chọn hàng & thanh toán nhé 😊';
+  // Hoan bao nhieu %
+  if (/bao nhieu %|bao nhieu phan tram|hoan bao nhieu|duoc bao nhieu|hoan may|ti le hoan|% hoan|hoan duoc bao|duoc may/.test(t)) return 'Bạn được hoàn 50% hoa hồng của đơn 💸 Shopee thường ~1–2% giá đơn (tối đa 15k/đơn), TikTok Shop cao hơn nhiều (tới ~10%). Đơn 1 triệu có thể hoàn ~15k (Shopee) đến ~100k (TikTok) tùy sản phẩm.';
+  // Phi
+  if (/\bphi\b|mat tien|free|mien phi|ton tien|co tinh phi|tinh phi|co ton|tra phi|co phi/.test(t)) return 'Dạ hoàn toàn MIỄN PHÍ ạ 🥰 Bạn chỉ dán link, mua như bình thường và nhận lại tiền hoàn.';
+  // Bao lau / khi nao co tien
+  if (/bao lau|khi nao|may ngay|bao gio|lau khong|chung nao|luc nao|nhan tien khi|khi nao co tien|khi nao ve|bao gio co/.test(t)) return FAQ.schedule;
+  // Lay link / gui link
+  if (/lay link|gui link|link dau|link o dau|cho link|xin link|link cua toi/.test(t)) return 'Bạn copy link sản phẩm (Shopee/TikTok Shop) rồi DÁN thẳng vào ô trên trang chủ, shop gửi lại link hoàn tiền + mã đơn ngay ạ 🎁';
+  // Cach mua
+  if (/cach mua|lam sao mua|mua the nao|mua sao|huong dan|mua nhu the|lam the nao|cach dung|dung sao/.test(t)) return FAQ.howto;
+  // San: lazada/tiki (chua ho tro)
+  if (/lazada|tiki|sendo/.test(t)) return 'Hiện shop hỗ trợ hoàn tiền cho SHOPEE và TIKTOK SHOP ạ. Lazada/Tiki tạm thời chưa có nhé 🙏';
+  // San: tiktok/shopee (co)
+  if (/tiktok|shopee|tik tok/.test(t)) return 'Dạ shop hỗ trợ cả SHOPEE và TIKTOK SHOP ạ 🎉 Bạn cứ dán link sản phẩm của 1 trong 2 sàn vào đây. Mẹo: TikTok thường hoàn cao & nhận nhanh hơn Shopee đó!';
+  // Cai app
+  if (/cai app|tai app|cai dat|download|tai ve|co app khong|app khong/.test(t)) return 'Không cần cài app gì cả ạ 🥳 Bạn dùng thẳng trên web này, dán link là xong!';
+  // Dang ky / tai khoan
+  if (/dang ky|dang nhap|tao tai khoan|can tai khoan|phai dang ky/.test(t)) return 'Không cần đăng ký hay đăng nhập gì đâu ạ 😊 Dán link → nhận link hoàn tiền → mua. Đơn giản vậy thôi!';
+  // Chinh hang / bao hanh / doi tra
+  if (/chinh hang|bao hanh|hang that|hang gia|hang nhai|chat luong|doi tra|tra hang|hoan hang/.test(t)) return 'Bạn mua THẲNG trên Shopee/TikTok Shop nên sản phẩm, giá, bảo hành, đổi trả đều theo chính sách của sàn & người bán ạ. Shop chỉ hoàn lại % tiền cho bạn thôi 👍';
+  // Gia / phi ship
+  if (/gia co|dat hon|mac hon|phi ship|phi van chuyen|ship bao nhieu|gia khac|dat hang khong/.test(t)) return 'Giá & phí ship y HỆT như bạn mua bình thường trên sàn ạ — không đội thêm đồng nào, mà còn được hoàn lại tiền 💸';
+  // Ship / giao hang bao lau
+  if (/ship bao lau|giao hang|bao lau nhan hang|van chuyen bao lau|khi nao nhan hang|nhan hang khi nao/.test(t)) return 'Việc giao hàng do sàn & người bán lo nhé, thời gian như bạn mua bình thường ạ. Shop chỉ phụ trách phần hoàn tiền thôi 😊';
+  // Voucher / ma giam gia
+  if (/voucher|ma giam gia|coupon|ma khuyen mai|giam gia|ma giam|ma code/.test(t)) return 'Shop không phát voucher mà HOÀN LẠI TIỀN cho bạn sau khi mua (50% hoa hồng) 💸 Bạn vẫn dùng được mọi mã giảm giá của sàn như thường nhé!';
+  // Gioi thieu / moi ban
+  if (/gioi thieu|moi ban|\bref\b|chia se|ru ban|moi nguoi/.test(t)) return 'Bạn kéo xuống cuối trang chủ có mục "Mời bạn bè" với link riêng của bạn để chia sẻ nhé 🎁 Càng nhiều người dùng, cộng đồng hoàn tiền càng mạnh!';
+  // Noi quy / dieu kien
   if (/noi quy|dieu kien|quy dinh|luat le|nhu the nao moi duoc/.test(t)) return FAQ.rules;
-  if (/stk|so tai khoan|ngan hang|nhan tien|rut tien|nhan hoan|hoan ve|chuyen khoan|so tk/.test(t)) return 'Bạn gửi giúp shop: SỐ TÀI KHOẢN + NGÂN HÀNG + TÊN chủ TK (kèm ảnh đơn nếu có) để shop chuyển tiền hoàn theo lịch (ngày 20–25 hàng tháng) nhé 💸';
-  if (/^(chao|hi|hello|hey|alo|shop oi|e shop|xin chao)/.test(t)) return FAQ.greeting;
-  if (/that khong|lua dao|\blua\b|uy tin|tin duoc|co that|scam|co lua/.test(t)) return 'Shop cam kết uy tín 🤝 Bạn mua thẳng trên Shopee (giá & bảo hành theo Shopee), shop hoàn lại % hoa hồng cho bạn. Có mã đơn tra cứu minh bạch nhé!';
+  // STK / nhan tien cach nao / rut tien
+  if (/stk|so tai khoan|ngan hang|nhan tien|rut tien|nhan hoan|hoan ve|chuyen khoan|so tk|nhan bang gi|nhan cach nao|toi thieu|rut ve|nhap tk/.test(t)) return 'Bạn vào mục "Tra cứu đơn" → nhập STK (chọn ngân hàng + số TK + tên chủ TK) để shop chuyển tiền hoàn theo lịch (ngày 20–25 hàng tháng). Không có mức tối thiểu, hoàn đủ theo đơn nhé 💸';
+  // An toan thong tin
+  if (/lo thong tin|bao mat|an toan thong tin|thong tin ca nhan|lo so tk|\bhack\b|an toan khong/.test(t)) return 'Shop KHÔNG giữ thẻ, không thu tiền, không cần mật khẩu của bạn — bạn thanh toán thẳng cho sàn. Thông tin chỉ dùng để chuyển tiền hoàn cho bạn thôi ạ 🔒';
+  // Uy tin / lua dao
+  if (/that khong|lua dao|\blua\b|uy tin|tin duoc|co that|scam|co lua|dam bao|co uy tin/.test(t)) return 'Shop cam kết uy tín 🤝 Bạn mua thẳng trên sàn (giá & bảo hành theo sàn), shop hoàn lại % hoa hồng cho bạn. Mỗi đơn có mã MLH tra cứu minh bạch — xem thêm ở trang "Cách hoạt động" nhé!';
+  // Check don / tra cuu
+  if (/check don|tra cuu|kiem tra don|don cua toi|xem don|tinh trang|trang thai|don toi dau/.test(t)) return 'Bạn vào mục "Tra cứu đơn" (hoặc gõ mã MLH-... của bạn vào đây) để xem trạng thái + tiền hoàn nhé 🔎';
+  // Ho tro / gap nguoi
+  if (/ho tro|cskh|gap nguoi|gap admin|tu van|noi chuyen|gap shop/.test(t)) return FAQ.support;
   return null;
 }
 
@@ -821,7 +863,7 @@ var sx=$('sheetx');if(sx)sx.addEventListener('click',function(){openSheet(false)
 var chat=$('chat'),chatbg=$('chatbg'),chatLastId=0,chatTimer=null;
 function chatThread(){var c='';try{c=localStorage.getItem('mlh_contact')||''}catch(e){}return (c&&c.length>=4)?c:('dev:'+UID)}
 function renderMsgs(ms,append){var box=$('chatlist');if(!append)box.innerHTML='';ms.forEach(function(m){if(m.id>chatLastId)chatLastId=m.id;var d=document.createElement('div');d.className='msg '+(m.sender==='user'?'user':'shop');d.innerHTML=esc(m.text).replace(/\\n/g,'<br>')+'<span class="t">'+(m.when||'')+'</span>';box.appendChild(d)});box.scrollTop=box.scrollHeight}
-var QCHIPS=['Có mất phí không?','Bao lâu nhận được tiền?','Cách nhận tiền hoàn?','Cách mua để được hoàn?'];
+var QCHIPS=['Có mất phí không?','Bao lâu nhận được tiền?','Hoàn bao nhiêu %?','Mua rồi sao chưa thấy hoàn?','Cách nhận tiền hoàn?','Có uy tín không?'];
 function renderChips(){var el=$('qchips');if(!el)return;el.innerHTML=QCHIPS.map(function(q){return '<span class="qchip">'+esc(q)+'</span>'}).join('');Array.prototype.forEach.call(el.querySelectorAll('.qchip'),function(c){c.onclick=function(){$('chatinput').value=c.textContent;chatSend()}})}
 function chatLoad(){fetch('/chat-history?thread='+encodeURIComponent(chatThread())+(chatLastId?('&after='+chatLastId):'')).then(function(r){return r.json()}).then(function(d){var ms=(d&&d.messages)||[];if(chatLastId===0&&!ms.length){$('chatlist').innerHTML='<div class="msg shop">Chào bạn 👋 Gửi <b>STK ngân hàng</b> hoặc <b>nick Zalo</b> để shop liên hệ trả tiền hoàn. Cần hỗ trợ gì cứ nhắn nhé!</div>'}else if(ms.length){renderMsgs(ms,chatLastId>0)}}).catch(function(){})}
 var SB=null,sbChan=null;
