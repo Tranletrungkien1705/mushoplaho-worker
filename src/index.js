@@ -460,7 +460,11 @@ function botAnswer(text) {
   if (exact) return { answer: exact };
   const toks = t.split(/[^a-z0-9]+/).filter(w => w.length >= 3);
   let best = null, bs = 0;
-  for (const f of BOT_FUZZY) { let sc = 0; for (const w of f.w) { if (w.length >= 3 && toks.indexOf(w) >= 0) sc++; } if (sc > bs) { bs = sc; best = f; } }
+  for (const f of BOT_FUZZY) {
+    let sc = 0; const seen = {};
+    for (const kw of f.w) { for (const w of kw.split(' ')) { if (w.length >= 3 && !seen[w] && toks.indexOf(w) >= 0) { sc++; seen[w] = 1; } } }
+    if (sc > bs) { bs = sc; best = f; }
+  }
   if (best && bs >= 2) { const a = botReply(best.p); if (a) return { answer: a, fuzzy: true }; }
   return null;
 }
