@@ -1179,7 +1179,7 @@ const ADMIN_HTML = `<!doctype html>
   <div class="card" id="panel" style="display:none">
     <div class="bar" style="justify-content:space-between">
       <div><b id="cnt">0</b> đơn · <span class="mut">mới nhất trước</span></div>
-      <div class="bar"><input id="filter" placeholder="Lọc mã/SĐT/sàn" style="width:150px"><button class="sm" id="syncbtn">🔄 Sync AccessTrade</button><button class="sm" id="payoutbtn" style="background:#7c3aed">📋 Xuất DS cần trả</button><button class="sm" id="reload">Tải lại</button></div>
+      <div class="bar"><input id="filter" placeholder="Lọc mã/SĐT/sàn" style="width:150px"><button class="sm" id="syncbtn">🔄 Sync AccessTrade</button><button class="sm" id="payoutbtn" style="background:#7c3aed">📋 Xuất DS cần trả</button><label style="font-size:12px;display:inline-flex;align-items:center;gap:3px;cursor:pointer" title="Gồm cả đơn CHƯA đối soát (ứng vốn trước, rủi ro đổi/trả)"><input type="checkbox" id="payEarly">⚡ ứng sớm</label><button class="sm" id="reload">Tải lại</button></div>
     </div>
     <p class="mut" style="margin-top:6px">Trạng thái <b>Đã mua/Đối soát/Huỷ</b> tự đồng bộ từ AccessTrade (6h/lần hoặc bấm Sync). Bạn chỉ cần chọn <b>"Đã hoàn"</b> khi đã chuyển tiền cho khách.</p>
     <div class="ov"><table id="tbl"><thead><tr>
@@ -1271,18 +1271,25 @@ function render(rows){
 $('btnLogin').onclick=login;$('pass').addEventListener('keydown',function(e){if(e.key==='Enter')login()});
 $('reload').onclick=function(){load(false)};$('filter').addEventListener('input',function(){render(window._rows||[])});
 function buildPayout(){
-  var rows=(window._rows||[]).filter(function(r){return r.status==='settled';});
+  var early=$('payEarly')&&$('payEarly').checked;
+  var rows=(window._rows||[]).filter(function(r){return r.status==='settled'||(early&&r.status==='confirmed');});
   var box=$('payoutbox');box.style.display='block';
-  if(!rows.length){box.innerHTML='<p class="mut">Chưa có đơn "AT đã đối soát ✓" cần trả. (Chỉ nên trả đơn đã đối soát để tránh rủi ro đổi/trả.)</p>';return;}
-  var total=0,txt='DANH SÁCH CẦN TRẢ ('+rows.length+' đơn):\\n';var body='';
+  if(!rows.length){box.innerHTML='<p class="mut">Chưa có đơn cần trả. Mặc định chỉ hiện đơn "AT đã đối soát ✓" (an toàn). Tick "⚡ ứng sớm" để gồm cả đơn chưa đối soát.</p>';return;}
+  rows.sort(function(a,b){return (a.status==='settled'?0:1)-(b.status==='settled'?0:1);});
+  var safeT=0,riskT=0,txt='DANH SÁCH CẦN TRẢ ('+rows.length+' đơn):\\n';var body='';
   rows.forEach(function(r){
-    var cb=Math.round(r.cashback||0);total+=cb;var bo=parseBank(r.bank_info);
+    var cb=Math.round(r.cashback||0);var risky=r.status!=='settled';
+    if(risky)riskT+=cb;else safeT+=cb;
+    var bo=parseBank(r.bank_info);
     var bankStr=bo?(bo.acc+' · '+(bo.bankName||bo.bin)+' · '+(bo.name||'')):'(CHƯA có STK — nhắc khách)';
-    body+='<tr><td><b>'+esc(r.order_code)+'</b></td><td style="color:#FF4E73;font-weight:700;white-space:nowrap">'+cb.toLocaleString('vi-VN')+'đ</td><td style="font-size:12px">'+esc(bankStr)+'</td><td>'+(bo?'<a href="'+vietqr(bo,cb,r.order_code)+'" target="_blank" style="padding:4px 8px;background:#12b76a;color:#fff;border-radius:6px;text-decoration:none;font-size:12px">📲 QR</a>':'—')+'</td></tr>';
-    txt+='• '+r.order_code+' | '+cb.toLocaleString('vi-VN')+'đ | '+bankStr+'\\n';
+    var tag=risky?'<span style="color:#e6a700;font-size:11px">⚠️ chưa đối soát</span>':'<span style="color:#039855;font-size:11px">✓ an toàn</span>';
+    body+='<tr style="'+(risky?'background:#fffdf5':'')+'"><td><b>'+esc(r.order_code)+'</b><br>'+tag+' · '+esc(r.platform||'')+'</td><td style="color:#FF4E73;font-weight:700;white-space:nowrap">'+cb.toLocaleString('vi-VN')+'đ</td><td style="font-size:12px">'+esc(bankStr)+'</td><td>'+(bo?'<a href="'+vietqr(bo,cb,r.order_code)+'" target="_blank" style="padding:4px 8px;background:#12b76a;color:#fff;border-radius:6px;text-decoration:none;font-size:12px">📲 QR</a>':'—')+'</td></tr>';
+    txt+='• '+r.order_code+' | '+cb.toLocaleString('vi-VN')+'đ | '+(risky?'[CHUA DOI SOAT] ':'')+bankStr+'\\n';
   });
-  txt+='TỔNG: '+total.toLocaleString('vi-VN')+'đ';
-  box.innerHTML='<div style="font-weight:800;margin-bottom:8px">💸 '+rows.length+' đơn cần trả · Tổng <span style="color:#FF4E73">'+total.toLocaleString('vi-VN')+'đ</span> <button class="sm" id="copyPayout" style="margin-left:8px;background:#555">📄 Sao chép</button></div><div class="ov"><table style="width:100%;font-size:13px"><thead><tr><th>Mã</th><th>Tiền</th><th>Ngân hàng · STK · Tên</th><th>QR</th></tr></thead><tbody>'+body+'</tbody></table></div>';
+  txt+='AN TOAN: '+safeT.toLocaleString('vi-VN')+'d'+(early?(' | UNG SOM (rui ro): '+riskT.toLocaleString('vi-VN')+'d'):'')+' | TONG: '+(safeT+riskT).toLocaleString('vi-VN')+'d';
+  var head='<div style="font-weight:800;margin-bottom:8px">💸 '+rows.length+' đơn · An toàn <span style="color:#039855">'+safeT.toLocaleString('vi-VN')+'đ</span>'+(early?(' · ⚠️ Ứng sớm <span style="color:#e6a700">'+riskT.toLocaleString('vi-VN')+'đ</span>'):'')+' <button class="sm" id="copyPayout" style="margin-left:8px;background:#555">📄 Sao chép</button></div>';
+  if(early&&riskT>0)head+='<p class="mut" style="color:#c77700;margin-bottom:6px">⚠️ Đơn "chưa đối soát" có thể bị đổi/trả → trả sớm mà đơn bị huỷ là bạn MẤT tiền. Nên chỉ ứng sớm đơn TikTok / giá trị nhỏ.</p>';
+  box.innerHTML=head+'<div class="ov"><table style="width:100%;font-size:13px"><thead><tr><th>Mã / trạng thái</th><th>Tiền</th><th>Ngân hàng · STK · Tên</th><th>QR</th></tr></thead><tbody>'+body+'</tbody></table></div>';
   window._payoutTxt=txt;
   $('copyPayout').onclick=function(){var c=this;if(navigator.clipboard)navigator.clipboard.writeText(window._payoutTxt).then(function(){c.textContent='✓ Đã copy'});};
 }
