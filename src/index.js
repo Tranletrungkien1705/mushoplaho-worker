@@ -321,6 +321,16 @@ async function syncSetStatusCashback(orderCode, status, cashback, commission, en
 
 // Ti le user duoc huong tren hoa hong publisher (0.5 = hoan 50%)
 const CASHBACK_RATE = 0.5;
+// Thuong chao mung don DAU TIEN cua moi khach (chi phi marketing co dinh, chi tra khi don thanh cong)
+const WELCOME_BONUS = 10000;
+async function firstOrderBonus(contact, env) {
+  if (!contact || contact === 'web' || !env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY) return 0;
+  try {
+    const r = await fetch(env.SUPABASE_URL + '/rest/v1/submissions?select=id&contact=eq.' + encodeURIComponent(contact) + '&limit=1', { headers: { apikey: env.SUPABASE_SERVICE_KEY, 'Authorization': 'Bearer ' + env.SUPABASE_SERVICE_KEY } });
+    const rows = await r.json().catch(() => []);
+    return (Array.isArray(rows) && rows.length === 0) ? WELCOME_BONUS : 0;   // chua co don nao -> khach moi
+  } catch (e) { return 0; }
+}
 
 // Dong bo status + TIEN HOAN tu AccessTrade /v1/transactions (khop utm_content = order_code)
 // status AT: 0 hold -> 'purchased', 1 approved -> 'confirmed', 2 rejected -> 'cancelled'. 'paid' (da chuyen khach) van thu cong.
@@ -719,7 +729,7 @@ const SHOP_HTML = `<!doctype html>
     <button class="btn" id="go">🎁 Nhận tiền hoàn ngay →</button>
     <div id="err"></div>
   </div>
-  <div class="trow"><span>🔒 An toàn</span><span>🆓 Miễn phí</span><span id="proof">🔥 Đang tải...</span></div>
+  <div class="trow"><span style="background:rgba(255,255,255,.28)">🎁 Đơn đầu +10k</span><span>🆓 Miễn phí</span><span id="proof">🔥 Đang tải...</span></div>
 </header>
 
 <div class="wrap">
@@ -734,6 +744,7 @@ const SHOP_HTML = `<!doctype html>
     <div id="result">
       <div class="ok">
         <p style="font-weight:800;margin-bottom:6px">🎉 Xong! Link hoàn tiền đã sẵn sàng</p>
+        <p id="bonusnote" style="display:none;color:#7c3aed;font-weight:800;margin-bottom:6px">🎁 Đơn ĐẦU TIÊN của bạn được <b>+10.000đ</b> thưởng chào mừng!</p>
         <p class="muted" style="margin:0 0 10px">🧾 Mã đơn: <span class="code" id="ocode"></span> — lưu để tra cứu tiền hoàn</p>
         <a class="btn buy" id="buy" target="_blank" rel="noopener">🛒 Mở &amp; mua ngay để nhận hoàn</a>
         <button class="btn ghost" id="copy" type="button">📄 Sao chép link</button>
@@ -829,7 +840,7 @@ function loadWallet(){
      var sm=(d&&d.summary)||{expected:0,paid:0,pending:0};
      $('wcount').textContent='('+o.length+' đơn)';
      $('wsummary').innerHTML=wtile('Tổng hoàn dự kiến',sm.expected,'#FF4E73')+wtile('Đang chờ về',sm.pending,'#e6a700')+wtile('Đã hoàn',sm.paid,'#039855');
-     $('walletlist').innerHTML=o.slice(0,6).map(function(r){return '<div style="border-bottom:1px dashed #ffe3d6;padding:9px 0;font-size:14px;display:flex;justify-content:space-between;gap:8px"><div><b>'+(r.order_code||'')+'</b> — '+(r.status_label||'')+'<div class="mut">'+(r.platform||'')+' · '+(r.when||'')+'</div></div><div style="font-weight:800;color:#FF4E73;white-space:nowrap">'+(r.cashback>0?('+'+fmt(r.cashback)):'—')+'</div></div>'}).join('');
+     $('walletlist').innerHTML=o.slice(0,6).map(function(r){var pay=(r.cashback||0)+(r.bonus||0);return '<div style="border-bottom:1px dashed #ffe3d6;padding:9px 0;font-size:14px;display:flex;justify-content:space-between;gap:8px"><div><b>'+(r.order_code||'')+'</b> — '+(r.status_label||'')+'<div class="mut">'+(r.platform||'')+' · '+(r.when||'')+(r.bonus>0?' · 🎁 +'+fmt(r.bonus):'')+'</div></div><div style="font-weight:800;color:#FF4E73;white-space:nowrap">'+(pay>0?('+'+fmt(pay)):'—')+'</div></div>'}).join('');
      $('wallet').style.display='block';}).catch(function(){});
 }
 function wtile(l,v,c){return '<div style="flex:1;min-width:92px;background:#fff7f3;border:1px solid #ffe1d4;border-radius:12px;padding:10px;text-align:center"><div style="font-size:17px;font-weight:800;color:'+c+'">'+fmt(v||0)+'</div><div class="mut" style="font-size:11px">'+l+'</div></div>'}
@@ -856,7 +867,7 @@ go.addEventListener('click',function(){
   fetch(API+'shop-convert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:u,contact:c,uid:UID,ref:refv})})
    .then(function(r){return r.json()})
    .then(function(d){go.textContent=old;go.disabled=false;
-     if(d&&d.buy_url){buy.href=d.buy_url;buy.dataset.link=d.buy_url;$('ocode').textContent=d.order_code||'';window._lastCode=d.order_code||'';
+     if(d&&d.buy_url){buy.href=d.buy_url;buy.dataset.link=d.buy_url;$('ocode').textContent=d.order_code||'';window._lastCode=d.order_code||'';var bnn=$('bonusnote');if(bnn)bnn.style.display=(d.bonus>0)?'block':'none';
        if(d.order_code)$('tolink').href='/track?q='+encodeURIComponent(d.order_code);
        if(c)try{localStorage.setItem('mlh_contact',c)}catch(e){}
        res.style.display='block';res.scrollIntoView({behavior:'smooth',block:'center'});setTimeout(loadWallet,1000)}
@@ -977,7 +988,7 @@ function wtile(l,v,c){return '<div style="flex:1;min-width:92px;background:#fff7
 function render(d){var rows=(d&&d.orders)||[];var sm=(d&&d.summary)||{expected:0,paid:0,pending:0};
   if(!rows.length){out.innerHTML='<p class="mut" style="margin-top:12px">Không tìm thấy đơn. Kiểm tra lại mã/SĐT nhé.</p>';return}
   var tiles='<div style="display:flex;gap:8px;margin:12px 0">'+wtile('Tổng dự kiến',sm.expected,'#FF4E73')+wtile('Đang chờ',sm.pending,'#e6a700')+wtile('Đã hoàn',sm.paid,'#039855')+'</div>';
-  out.innerHTML=tiles+rows.map(function(r){return '<div class="row" style="display:flex;justify-content:space-between;gap:8px"><div><div class="st">'+(r.order_code||'(chưa có mã)')+' — '+r.status_label+'</div><div class="mut">'+(r.platform||'')+' · '+(r.when||'')+'</div></div><div style="font-weight:800;color:#FF4E73;white-space:nowrap">'+(r.cashback>0?('+'+fmt(r.cashback)):'—')+'</div></div>';}).join('')
+  out.innerHTML=tiles+rows.map(function(r){var pay=(r.cashback||0)+(r.bonus||0);return '<div class="row" style="display:flex;justify-content:space-between;gap:8px"><div><div class="st">'+(r.order_code||'(chưa có mã)')+' — '+r.status_label+'</div><div class="mut">'+(r.platform||'')+' · '+(r.when||'')+(r.bonus>0?' · 🎁 thưởng +'+fmt(r.bonus):'')+'</div></div><div style="font-weight:800;color:#FF4E73;white-space:nowrap">'+(pay>0?('+'+fmt(pay)):'—')+'</div></div>';}).join('')
    +'<p class="mut" style="margin-top:12px">💸 Tiền hoàn = 50% hoa hồng. Nhận sau đối soát: TikTok ~30–45 ngày · Shopee ~2–3 tháng; shop chuyển ngày 20–25 hàng tháng.</p>';
   var bc=document.getElementById('bankcard');if(bc){bc.style.display='block';
     if(d.bank){try{var o=JSON.parse(d.bank);if(o&&o.bin){var s=document.getElementById('bankSel');if(s&&!s.value)s.value=o.bin;var a=document.getElementById('bankAcc');if(a&&!a.value)a.value=o.acc||'';var h=document.getElementById('bankHolder');if(h&&!h.value)h.value=o.name||'';}}catch(e){}}
@@ -1176,6 +1187,11 @@ const ADMIN_HTML = `<!doctype html>
     <b>📈 Phễu chuyển đổi</b> <span class="mut">(tỉ lệ so với bước trước)</span>
     <div id="funneltiles" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px"></div>
   </div>
+  <div class="card" id="botmisscard" style="display:none">
+    <b>🤖 Câu khách hỏi bot chưa hiểu / muốn gặp người</b> <button class="sm" id="botmissbtn" style="margin-left:8px">🔄 Tải</button>
+    <p class="mut" style="margin-top:4px">Xem khách hay hỏi gì để báo mình bổ sung câu trả lời cho bot (khách sẽ được tự trả lời lần sau).</p>
+    <div id="botmisslist" style="margin-top:8px"></div>
+  </div>
   <div class="card" id="panel" style="display:none">
     <div class="bar" style="justify-content:space-between">
       <div><b id="cnt">0</b> đơn · <span class="mut">mới nhất trước</span></div>
@@ -1231,7 +1247,7 @@ function login(){PASS=$('pass').value;$('lerr').textContent='';load(true)}
 function load(first){
   fetch('/admin-list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS})})
    .then(function(r){if(r.status===401){throw new Error('Sai mật khẩu')}return r.json()})
-   .then(function(d){$('login').style.display='none';$('dash').style.display='block';$('panel').style.display='block';$('chatpanel').style.display='block';render(d.orders||[]);loadStats();loadFunnel();loadThreads();renderCanned();if(!window._thPoll)window._thPoll=setInterval(loadThreads,8000)})
+   .then(function(d){$('login').style.display='none';$('dash').style.display='block';$('panel').style.display='block';$('chatpanel').style.display='block';render(d.orders||[]);loadStats();loadFunnel();loadBotMiss();loadThreads();renderCanned();if(!window._thPoll)window._thPoll=setInterval(loadThreads,8000)})
    .catch(function(e){if(first)$('lerr').textContent=e.message||'Lỗi'});
 }
 function render(rows){
@@ -1278,12 +1294,12 @@ function buildPayout(){
   rows.sort(function(a,b){return (a.status==='settled'?0:1)-(b.status==='settled'?0:1);});
   var safeT=0,riskT=0,txt='DANH SÁCH CẦN TRẢ ('+rows.length+' đơn):\\n';var body='';
   rows.forEach(function(r){
-    var cb=Math.round(r.cashback||0);var risky=r.status!=='settled';
+    var bn=Math.round(r.bonus||0);var cb=Math.round(r.cashback||0)+bn;var risky=r.status!=='settled';
     if(risky)riskT+=cb;else safeT+=cb;
     var bo=parseBank(r.bank_info);
     var bankStr=bo?(bo.acc+' · '+(bo.bankName||bo.bin)+' · '+(bo.name||'')):'(CHƯA có STK — nhắc khách)';
     var tag=risky?'<span style="color:#e6a700;font-size:11px">⚠️ chưa đối soát</span>':'<span style="color:#039855;font-size:11px">✓ an toàn</span>';
-    body+='<tr style="'+(risky?'background:#fffdf5':'')+'"><td><b>'+esc(r.order_code)+'</b><br>'+tag+' · '+esc(r.platform||'')+'</td><td style="color:#FF4E73;font-weight:700;white-space:nowrap">'+cb.toLocaleString('vi-VN')+'đ</td><td style="font-size:12px">'+esc(bankStr)+'</td><td>'+(bo?'<a href="'+vietqr(bo,cb,r.order_code)+'" target="_blank" style="padding:4px 8px;background:#12b76a;color:#fff;border-radius:6px;text-decoration:none;font-size:12px">📲 QR</a>':'—')+'</td></tr>';
+    body+='<tr style="'+(risky?'background:#fffdf5':'')+'"><td><b>'+esc(r.order_code)+'</b><br>'+tag+' · '+esc(r.platform||'')+'</td><td style="color:#FF4E73;font-weight:700;white-space:nowrap">'+cb.toLocaleString('vi-VN')+'đ'+(bn>0?'<br><span style="font-size:10px;color:#7c3aed">🎁 gồm +'+bn.toLocaleString('vi-VN')+'</span>':'')+'</td><td style="font-size:12px">'+esc(bankStr)+'</td><td>'+(bo?'<a href="'+vietqr(bo,cb,r.order_code)+'" target="_blank" style="padding:4px 8px;background:#12b76a;color:#fff;border-radius:6px;text-decoration:none;font-size:12px">📲 QR</a>':'—')+'</td></tr>';
     txt+='• '+r.order_code+' | '+cb.toLocaleString('vi-VN')+'đ | '+(risky?'[CHUA DOI SOAT] ':'')+bankStr+'\\n';
   });
   txt+='AN TOAN: '+safeT.toLocaleString('vi-VN')+'d'+(early?(' | UNG SOM (rui ro): '+riskT.toLocaleString('vi-VN')+'d'):'')+' | TONG: '+(safeT+riskT).toLocaleString('vi-VN')+'d';
@@ -1313,6 +1329,9 @@ function loadFunnel(){fetch('/admin-funnel',{method:'POST',headers:{'Content-Typ
   function ft(l,v,sub){return '<div style="flex:1;min-width:108px;background:#f7f9fc;border-radius:10px;padding:10px;text-align:center"><div style="font-size:22px;font-weight:800">'+(v||0)+'</div><div class="mut">'+l+'</div>'+(sub?'<div style="color:#039855;font-weight:700;font-size:12px">'+sub+'</div>':'<div style="height:16px"></div>')+'</div>'}
   $('funneltiles').innerHTML=ft('Ghé thăm',d.visits,'')+ft('Tạo link',d.links,pct(d.links,d.visits))+ft('Bấm mua',d.clicks,pct(d.clicks,d.links))+ft('Đã mua',d.purchased,pct(d.purchased,d.clicks));
   $('funnelcard').style.display='block';}).catch(function(){})}
+function loadBotMiss(){fetch('/admin-botmiss',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS})}).then(function(r){return r.json()}).then(function(d){var it=(d.items)||[];$('botmisscard').style.display='block';
+  $('botmisslist').innerHTML=it.length?it.map(function(x){return '<div class="row" style="font-size:13px"><span style="color:'+(x.type==='bot_escalate'?'#e6a700':'#1f6feb')+'">'+(x.type==='bot_escalate'?'🙋 muốn gặp người':'❓ bot chưa hiểu')+'</span> · <b>'+esc(x.q||'')+'</b> <span class="mut">'+(x.when||'')+'</span></div>'}).join(''):'<p class="mut">Chưa có (bot đang trả lời tốt 👍)</p>';}).catch(function(){})}
+var bmb=$('botmissbtn');if(bmb)bmb.onclick=loadBotMiss;
 var CANNED=['Đã nhận STK, cảm ơn bạn nhé! 💸','Đơn đang đối soát (TikTok ~30–45 ngày, Shopee ~2–3 tháng), có tiền shop chuyển ngay ạ.','Bạn gửi giúp shop: STK + Ngân hàng + Tên chủ TK nhé.','Bạn nhớ bấm link shop gửi TRƯỚC khi mua để được ghi nhận nha.'];
 function renderCanned(){var el=$('cannedchips');if(!el)return;el.innerHTML=CANNED.map(function(q,i){return '<span data-ci="'+i+'" style="background:#eef4ff;color:#1f6feb;border:1px solid #cdddff;border-radius:999px;padding:5px 10px;font-size:12px;cursor:pointer">'+esc(q.slice(0,20))+'…</span>'}).join('');Array.prototype.forEach.call(el.querySelectorAll('[data-ci]'),function(c){c.onclick=function(){$('creply').value=CANNED[+c.getAttribute('data-ci')];if(curThread)$('csend').click()}})}
 var FBSAMPLE='🔥 MẸO MUA SHOPEE ĐƯỢC HOÀN LẠI TIỀN\\n\\nMua đồ Shopee như bình thường, qua 1 bước nhỏ là được HOÀN tới 50% hoa hồng của đơn về tài khoản 💸\\n\\n👉 Dán link sản phẩm vào: mushoplaho.kientlt59.workers.dev\\nMiễn phí, không cần cài app. Ai hay mua Shopee lưu lại nhé!';
@@ -1446,8 +1465,9 @@ export default {
       const ref = (body.ref || '').trim().slice(0, 40);
       const row = { buyer_psid: 'web', buyer_text: 'web', contact, order_code: code, original_url: u, platform, affiliate_url: aff, status: 'web' };
       if (ref && ref !== uid) row.ref_by = ref;   // ai gioi thieu don nay
+      row.bonus = await firstOrderBonus(contact, env);   // thuong chao mung don dau
       await supabaseInsert(row, env);
-      return json({ buy_url: aff, order_code: code });
+      return json({ buy_url: aff, order_code: code, bonus: row.bonus });
     }
 
     // Bam mua tu trang Deal -> tao ma don + affiliate co utm (track cashback) roi chuyen huong sang san
@@ -1458,7 +1478,8 @@ export default {
       const code = genOrderCode();
       const { platform, aff } = await makeAffiliate(u, env, code);
       const contact = uid ? 'dev:' + uid : 'web';
-      ctx.waitUntil(supabaseInsert({ buyer_psid: 'web', buyer_text: 'deal', contact, order_code: code, original_url: u, platform, affiliate_url: aff, status: 'web' }, env));
+      const bonus = await firstOrderBonus(contact, env);
+      ctx.waitUntil(supabaseInsert({ buyer_psid: 'web', buyer_text: 'deal', contact, order_code: code, original_url: u, platform, affiliate_url: aff, status: 'web', bonus }, env));
       ctx.waitUntil(evInsert('buy_click', uid, env));
       return Response.redirect(aff, 302);
     }
@@ -1478,11 +1499,11 @@ export default {
       const rows = await supabaseFind((body.q || ''), env);
       const orders = rows.map(r => ({
         order_code: r.order_code, platform: r.platform, status: r.status, status_label: statusLabel(r.status),
-        cashback: Math.round(r.cashback || 0),
+        cashback: Math.round(r.cashback || 0), bonus: Math.round(r.bonus || 0),
         when: r.created_at ? String(r.created_at).slice(0, 10) : ''
       }));
       let expected = 0, paid = 0, pending = 0;
-      rows.forEach(r => { const cb = Math.round(r.cashback || 0); if (r.status === 'cancelled') return; expected += cb; if (r.status === 'paid') paid += cb; else pending += cb; });
+      rows.forEach(r => { const cb = Math.round(r.cashback || 0) + Math.round(r.bonus || 0); if (r.status === 'cancelled') return; expected += cb; if (r.status === 'paid') paid += cb; else pending += cb; });
       const bank = (rows[0] && rows[0].bank_info) || '';
       return json({ orders, summary: { expected, paid, pending }, bank });
     }
@@ -1594,6 +1615,14 @@ export default {
         const del = await r.json().catch(() => []); n = Array.isArray(del) ? del.length : 0;
       } catch (e) { }
       return json({ ok: true, deleted: n });
+    }
+    if (request.method === 'POST' && path === '/admin-botmiss') {
+      const body = await request.json().catch(() => ({}));
+      if (!checkAdmin(body.pass, env)) return json({ error: 'unauthorized' }, 401);
+      let rows = [];
+      try { const r = await fetch(env.SUPABASE_URL + '/rest/v1/events?type=in.(bot_miss,bot_escalate)&order=id.desc&limit=60', { headers: { apikey: env.SUPABASE_SERVICE_KEY, 'Authorization': 'Bearer ' + env.SUPABASE_SERVICE_KEY } }); rows = await r.json().catch(() => []); } catch (e) { }
+      if (!Array.isArray(rows)) rows = [];
+      return json({ items: rows.map(x => ({ type: x.type, q: x.uid, when: x.created_at ? String(x.created_at).slice(5, 16) : '' })) });
     }
     if (request.method === 'POST' && path === '/admin-fb-post') {
       const body = await request.json().catch(() => ({}));
